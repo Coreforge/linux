@@ -23,8 +23,9 @@
 #  define FB_WRITEL fb_writel
 #  define FB_READL  fb_readl
 #else
-#  define FB_WRITEL fb_writeq
-#  define FB_READL  fb_readq
+//this is temporary, writeq or two writel without enough delay in between lock up
+#  define FB_WRITEL fb_writel
+#  define FB_READL  fb_readl
 #endif
 
     /*

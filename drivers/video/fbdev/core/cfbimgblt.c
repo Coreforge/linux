@@ -360,21 +360,29 @@ static inline void fast_imageblit32(const struct fb_image *image,
 		while (j >= 8) {
 			u8 bits = *src;
 			end_mask = tab[(bits >> 7) & 1];
-			FB_WRITEL((end_mask & eorx) ^ bgx, dst++);
+			memset_io(dst++,(end_mask & eorx) ^ bgx,4);
 			end_mask = tab[(bits >> 6) & 1];
-			FB_WRITEL((end_mask & eorx) ^ bgx, dst++);
+			//FB_WRITEL((end_mask & eorx) ^ bgx, dst++);
+			memset_io(dst++,(end_mask & eorx) ^ bgx,4);
 			end_mask = tab[(bits >> 5) & 1];
-			FB_WRITEL((end_mask & eorx) ^ bgx, dst++);
+			//FB_WRITEL((end_mask & eorx) ^ bgx, dst++);
+			memset_io(dst++,(end_mask & eorx) ^ bgx,4);
 			end_mask = tab[(bits >> 4) & 1];
-			FB_WRITEL((end_mask & eorx) ^ bgx, dst++);
+			//FB_WRITEL((end_mask & eorx) ^ bgx, dst++);
+			memset_io(dst++,(end_mask & eorx) ^ bgx,4);
+			//printk(KERN_ALERT "DEBUG: Passed %s %d \n",__FUNCTION__,__LINE__);
 			end_mask = tab[(bits >> 3) & 1];
-			FB_WRITEL((end_mask & eorx) ^ bgx, dst++);
+			//FB_WRITEL((end_mask & eorx) ^ bgx, dst++);
+			memset_io(dst++,(end_mask & eorx) ^ bgx,4);
 			end_mask = tab[(bits >> 2) & 1];
-			FB_WRITEL((end_mask & eorx) ^ bgx, dst++);
+			//FB_WRITEL((end_mask & eorx) ^ bgx, dst++);
+			memset_io(dst++,(end_mask & eorx) ^ bgx,4);
 			end_mask = tab[(bits >> 1) & 1];
-			FB_WRITEL((end_mask & eorx) ^ bgx, dst++);
+			//FB_WRITEL((end_mask & eorx) ^ bgx, dst++);
+			memset_io(dst++,(end_mask & eorx) ^ bgx,4);
 			end_mask = tab[bits & 1];
-			FB_WRITEL((end_mask & eorx) ^ bgx, dst++);
+			//FB_WRITEL((end_mask & eorx) ^ bgx, dst++);
+			memset_io(dst++,(end_mask & eorx) ^ bgx,4);
 			src++;
 			j -= 8;
 		}
