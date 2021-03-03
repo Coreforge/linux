@@ -4955,7 +4955,8 @@ static void evergreen_uvd_init(struct radeon_device *rdev)
 static void evergreen_uvd_start(struct radeon_device *rdev)
 {
 	int r;
-
+	printk("disablign UVD (locks up otherwise)\n");
+	return;
 	if (!rdev->has_uvd)
 		return;
 
