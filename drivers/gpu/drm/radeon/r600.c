@@ -2825,21 +2825,25 @@ int r600_ring_test(struct radeon_device *rdev, struct radeon_ring *ring)
 	uint32_t tmp = 0;
 	unsigned i;
 	int r;
-
+	//r600_print_gpu_status_regs(rdev);
 	r = radeon_scratch_get(rdev, &scratch);
 	if (r) {
 		DRM_ERROR("radeon: cp failed to get scratch reg (%d).\n", r);
 		return r;
 	}
 	WREG32(scratch, 0xCAFEDEAD);
-	r = radeon_ring_lock(rdev, ring, 3);
+	r = radeon_ring_lock(rdev, ring, 7);
 	if (r) {
 		DRM_ERROR("radeon: cp failed to lock ring %d (%d).\n", ring->idx, r);
 		radeon_scratch_free(rdev, scratch);
 		return r;
 	}
+	//printk("Scratch reg address: 0x%llx Ring wptr: 0x%llx Ring_Obj kptr: 0x%llx Ring->ring[ring->wptr]: 0x%llx ring->rptr_offset: 0x%x ring->rprt_save_reg: 0x%x\n",virt_to_phys((rdev->rmmio) + scratch),virt_to_phys(&ring->wptr),virt_to_phys(ring->ring_obj->kptr),virt_to_phys(&ring->ring[ring->wptr]),ring->rptr_offs,ring->rptr_save_reg);		//leaking a bunch of addresses
+	//printk("rptr: 0x%x wptr: 0x%x\n", RREG32(R600_CP_RB_RPTR),radeon_ring_get_wptr(rdev,ring));
 	radeon_ring_write(ring, PACKET3(PACKET3_SET_CONFIG_REG, 1));
+	//writel(PACKET3(PACKET3_SET_CONFIG_REG, 1),ring->ring[ring->wptr]);
 	radeon_ring_write(ring, ((scratch - PACKET3_SET_CONFIG_REG_OFFSET) >> 2));
+	//writel(((scratch - PACKET3_SET_CONFIG_REG_OFFSET) >> 2),ring->ring[ring->wptr]);
 	radeon_ring_write(ring, 0xDEADBEEF);
 	radeon_ring_unlock_commit(rdev, ring, false);
 	for (i = 0; i < rdev->usec_timeout; i++) {
@@ -2848,6 +2852,7 @@ int r600_ring_test(struct radeon_device *rdev, struct radeon_ring *ring)
 			break;
 		udelay(1);
 	}
+	//r600_print_gpu_status_regs(rdev);
 	if (i < rdev->usec_timeout) {
 		DRM_INFO("ring test on %d succeeded in %d usecs\n", ring->idx, i);
 	} else {
@@ -2855,7 +2860,7 @@ int r600_ring_test(struct radeon_device *rdev, struct radeon_ring *ring)
 			  ring->idx, scratch, tmp);
 		r = -EINVAL;
 	}
-	radeon_scratch_free(rdev, scratch);
+	//radeon_scratch_free(rdev, scratch);
 	return r;
 }
 

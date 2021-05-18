@@ -134,7 +134,7 @@ static int ttm_resource_ioremap(struct ttm_bo_device *bdev,
 		addr = mem->bus.addr;
 	} else {
 		size_t bus_size = (size_t)mem->num_pages << PAGE_SHIFT;
-
+		WARN_ON_ONCE(mem->placement & TTM_PL_FLAG_WC);
 		if (mem->placement & TTM_PL_FLAG_WC)
 			addr = ioremap_wc(mem->bus.offset, bus_size);
 		else

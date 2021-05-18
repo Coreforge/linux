@@ -654,7 +654,10 @@ void rs600_gart_set_page(struct radeon_device *rdev, unsigned i,
 			 uint64_t entry)
 {
 	void __iomem *ptr = (void *)rdev->gart.ptr;
-	writeq(entry, ptr + (i * 8));
+	uint32_t high = entry >> 32;
+	writel(entry,ptr+(i*8));
+	writel(high,ptr + (i*8) + 4);
+	//writeq(entry, ptr + (i * 8));
 }
 
 int rs600_irq_set(struct radeon_device *rdev)

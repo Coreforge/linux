@@ -490,7 +490,7 @@ int radeon_wb_init(struct radeon_device *rdev)
 	}
 
 	/* clear wb memory */
-	memset((char *)rdev->wb.wb, 0, RADEON_GPU_PAGE_SIZE);
+	memset_io((char *)rdev->wb.wb, 0, RADEON_GPU_PAGE_SIZE);
 	/* disable event_write fences */
 	rdev->wb.use_event = false;
 	/* disabled via module param */
@@ -516,9 +516,9 @@ int radeon_wb_init(struct radeon_device *rdev)
 		rdev->wb.enabled = true;
 		rdev->wb.use_event = true;
 	}
-
+	//rdev->wb.enabled = false;		//CHANGED: always disable writeback
+	//rdev->wb.use_event=true;
 	dev_info(rdev->dev, "WB %sabled\n", rdev->wb.enabled ? "en" : "dis");
-
 	return 0;
 }
 

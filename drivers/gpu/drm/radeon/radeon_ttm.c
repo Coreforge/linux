@@ -549,7 +549,8 @@ static int radeon_ttm_backend_bind(struct ttm_bo_device *bdev,
 		     ttm->num_pages, bo_mem, ttm);
 	}
 	if (ttm->caching_state == tt_cached)
-		flags |= RADEON_GART_PAGE_SNOOP;
+		printk("TTM Page would've been snooped\n");
+		//flags |= RADEON_GART_PAGE_SNOOP;
 	r = radeon_gart_bind(rdev, gtt->offset, ttm->num_pages,
 			     ttm->pages, gtt->ttm.dma_address, flags);
 	if (r) {

@@ -2687,12 +2687,15 @@ void radeon_atombios_fini(struct radeon_device *rdev);
  *
  * Write a value to the requested ring buffer (all asics).
  */
+
+
 static inline void radeon_ring_write(struct radeon_ring *ring, uint32_t v)
 {
 	if (ring->count_dw <= 0)
 		DRM_ERROR("radeon: writing more dwords to the ring than expected!\n");
 
 	ring->ring[ring->wptr++] = v;
+	//mb();
 	ring->wptr &= ring->ptr_mask;
 	ring->count_dw--;
 	ring->ring_free_dw--;

@@ -130,6 +130,7 @@ int radeon_gart_table_vram_alloc(struct radeon_device *rdev)
 	int r;
 
 	if (rdev->gart.robj == NULL) {
+		printk("allocating GART table\n");
 		r = radeon_bo_create(rdev, rdev->gart.table_size,
 				     PAGE_SIZE, true, RADEON_GEM_DOMAIN_VRAM,
 				     0, NULL, NULL, &rdev->gart.robj);
@@ -137,6 +138,7 @@ int radeon_gart_table_vram_alloc(struct radeon_device *rdev)
 			return r;
 		}
 	}
+	printk("successfully allocated GART table\n");
 	return 0;
 }
 
@@ -181,7 +183,7 @@ int radeon_gart_table_vram_pin(struct radeon_device *rdev)
 		mb();
 		radeon_gart_tlb_flush(rdev);
 	}
-
+	printk("pinned GART table (r=%d)\n",r);
 	return r;
 }
 
@@ -207,6 +209,7 @@ void radeon_gart_table_vram_unpin(struct radeon_device *rdev)
 		radeon_bo_unreserve(rdev->gart.robj);
 		rdev->gart.ptr = NULL;
 	}
+	printk("unpinned GART\n");
 }
 
 /**
@@ -224,6 +227,7 @@ void radeon_gart_table_vram_free(struct radeon_device *rdev)
 		return;
 	}
 	radeon_bo_unref(&rdev->gart.robj);
+	printk("freed GART\n");
 }
 
 /*
@@ -268,6 +272,7 @@ void radeon_gart_unbind(struct radeon_device *rdev, unsigned offset,
 		mb();
 		radeon_gart_tlb_flush(rdev);
 	}
+	printk("unbound Page\n");
 }
 
 /**
@@ -316,6 +321,7 @@ int radeon_gart_bind(struct radeon_device *rdev, unsigned offset,
 		mb();
 		radeon_gart_tlb_flush(rdev);
 	}
+	//printk("bound %d pages at dma address 0x%llx, offset 0x%llx\n", pages, dma_to_phys(rdev->dev,dma_addr),offset);
 	return 0;
 }
 

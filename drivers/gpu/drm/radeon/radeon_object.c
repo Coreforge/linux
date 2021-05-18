@@ -116,7 +116,6 @@ void radeon_ttm_placement_from_domain(struct radeon_bo *rbo, u32 domain)
 			rbo->placements[c++].flags = //TTM_PL_FLAG_WC |		//Disable write combining
 						     TTM_PL_FLAG_UNCACHED;
 		}
-
 		rbo->placements[c].fpfn = 0;
 		rbo->placements[c].mem_type = TTM_PL_VRAM;
 		rbo->placements[c++].flags = //TTM_PL_FLAG_WC |
@@ -255,8 +254,17 @@ int radeon_bo_create(struct radeon_device *rdev,
 	if (!drm_arch_can_wc_memory())
 		bo->flags &= ~RADEON_GEM_GTT_WC;
 #endif
+
+		/*
+		 * This would be a BUG_ON() but since the video card provides me
+		 * with my primary console I'd rather not abort at this point.
+		 */
+	//WARN(bo->flags & (RADEON_GEM_GTT_WC | RADEON_GEM_GTT_UC),
+	     //"Workaround implementation is borked");
+
 	//Write combining may cause issues on the raspberry pi
-	bo->flags &= ~(RADEON_GEM_GTT_WC | RADEON_GEM_GTT_UC);
+	//bo->flags &= ~(RADEON_GEM_GTT_WC | RADEON_GEM_GTT_UC);
+	//bo->flags |= RADEON_GEM_GTT_UC;
 
 	radeon_ttm_placement_from_domain(bo, domain);
 	/* Kernel allocation are uninterruptible */

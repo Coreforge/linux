@@ -2999,7 +2999,7 @@ static int evergreen_cp_start(struct radeon_device *rdev)
 	struct radeon_ring *ring = &rdev->ring[RADEON_RING_TYPE_GFX_INDEX];
 	int r, i;
 	uint32_t cp_me;
-
+	printk("evergreen_cp_start\n");
 	r = radeon_ring_lock(rdev, ring, 7);
 	if (r) {
 		DRM_ERROR("radeon: cp failed to lock ring (%d).\n", r);
@@ -5096,7 +5096,7 @@ static int evergreen_startup(struct radeon_device *rdev)
 		return r;
 	r = r600_dma_resume(rdev);
 	if (r)
-		return r;
+	return r;
 
 	evergreen_uvd_resume(rdev);
 
@@ -5201,7 +5201,8 @@ int evergreen_init(struct radeon_device *rdev)
 			return -EINVAL;
 		}
 		DRM_INFO("GPU not posted. posting now...\n");
-		atom_asic_init(rdev->mode_info.atom_context);
+		r = atom_asic_init(rdev->mode_info.atom_context);
+		printk("Posting result: %d\n",r);
 	}
 	/* init golden registers */
 	evergreen_init_golden_registers(rdev);
