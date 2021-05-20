@@ -34,9 +34,21 @@
 #  define FB_WRITEL fb_writel
 #  define FB_READL  fb_readl
 #else
-#  define FB_WRITEL fb_writeq
-#  define FB_READL  fb_readq
+#  define FB_WRITEL fb_writel_writeq
+#  define FB_READL  fb_readl_readq
 #endif
+
+static void fb_writel_writeq(u64 val, volatile void __iomem *addr){
+	fb_writel(val,addr);
+	fb_writel(val >> 32, addr + 4);
+}
+
+static u64 fb_readl_readq(volatile void __iomem *addr){
+	u64 val;
+	val = fb_readl(addr);
+	val |= fb_readl(addr + 4) << 32;
+	return val;
+}
 
     /*
      *  Generic bitwise copy algorithm

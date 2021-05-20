@@ -24,13 +24,27 @@
 #  define FB_READL  fb_readl
 #else
 //this is temporary, writeq or two writel without enough delay in between lock up
-#  define FB_WRITEL fb_writel
-#  define FB_READL  fb_readl
+#  define FB_WRITEL fb_writel_writeq
+#  define FB_READL  fb_readl_readq
 #endif
 
     /*
      *  Aligned pattern fill using 32/64-bit memory accesses
      */
+
+
+
+static void fb_writel_writeq(u64 val, volatile void __iomem *addr){
+	fb_writel(val,addr);
+	fb_writel(val >> 32, addr + 4);
+}
+
+static u64 fb_readl_readq(volatile void __iomem *addr){
+	u64 val;
+	val = fb_readl(addr);
+	val |= fb_readl(addr + 4) << 32;
+	return val;
+}
 
 static void
 bitfill_aligned(struct fb_info *p, unsigned long __iomem *dst, int dst_idx,

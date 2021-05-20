@@ -455,6 +455,35 @@ void radeon_wb_fini(struct radeon_device *rdev)
  * Used at driver startup.
  * Returns 0 on success or an -error on failure.
  */
+
+//memset_io with only 32-bit accesses
+void memset_io_pcie_wb(volatile void __iomem *dst, int c, size_t count)
+{
+	u32 qc = (u8)c;
+
+	qc |= qc << 8;
+	qc |= qc << 16;
+	//qc |= qc << 32;
+	mb();
+	while (count && !IS_ALIGNED((unsigned long)dst, 8)) {
+		__raw_writeb(c, dst);
+		dst++;
+		count--;
+	}
+
+	while (count >= 4) {
+		__raw_writel(qc, dst);
+		dst += 4;
+		count -= 4;
+	}
+
+	while (count) {
+		__raw_writeb(c, dst);
+		dst++;
+		count--;
+	}
+}
+
 int radeon_wb_init(struct radeon_device *rdev)
 {
 	int r;
@@ -490,7 +519,7 @@ int radeon_wb_init(struct radeon_device *rdev)
 	}
 
 	/* clear wb memory */
-	memset_io((char *)rdev->wb.wb, 0, RADEON_GPU_PAGE_SIZE);
+	memset_io_pcie_wb((char *)rdev->wb.wb, 0, RADEON_GPU_PAGE_SIZE);
 	/* disable event_write fences */
 	rdev->wb.use_event = false;
 	/* disabled via module param */

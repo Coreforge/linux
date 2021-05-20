@@ -217,7 +217,7 @@ void memset_io_pcie(volatile void __iomem *dst, int c, size_t count)
 	qc |= qc << 16;
 	//qc |= qc << 32;
 
-	mb();
+	__iowmb();
 
 	while (count && !IS_ALIGNED((unsigned long)dst, 16)) {
 		__raw_writeb(c, dst);
