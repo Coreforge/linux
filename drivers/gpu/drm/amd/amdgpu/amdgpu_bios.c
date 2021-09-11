@@ -110,7 +110,7 @@ static bool igp_read_bios_from_vram(struct amdgpu_device *adev)
 		return false;
 	}
 	adev->bios_size = size;
-	memcpy_fromio(adev->bios, bios, size);
+	memcpy_fromio_pcie(adev->bios, bios, size);
 	iounmap(bios);
 
 	if (!check_atom_bios(adev->bios, size)) {
@@ -139,7 +139,7 @@ bool amdgpu_read_bios(struct amdgpu_device *adev)
 		return false;
 	}
 	adev->bios_size = size;
-	memcpy_fromio(adev->bios, bios, size);
+	memcpy_fromio_pcie(adev->bios, bios, size);
 	pci_unmap_rom(adev->pdev, bios);
 
 	if (!check_atom_bios(adev->bios, size)) {
@@ -209,7 +209,7 @@ static bool amdgpu_read_platform_bios(struct amdgpu_device *adev)
 	if (!bios)
 		goto free_bios;
 
-	memcpy_fromio(adev->bios, bios, romlen);
+	memcpy_fromio_pcie(adev->bios, bios, romlen);
 	iounmap(bios);
 
 	if (!check_atom_bios(adev->bios, romlen))

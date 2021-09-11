@@ -2690,7 +2690,7 @@ static ssize_t psp_usbc_pd_fw_sysfs_write(struct device *dev,
 	if (ret)
 		goto rel_buf;
 
-	memcpy_toio(cpu_addr, usbc_pd_fw->data, usbc_pd_fw->size);
+	memcpy_toio_pcie(cpu_addr, usbc_pd_fw->data, usbc_pd_fw->size);
 
 	/*
 	 * x86 specific workaround.
