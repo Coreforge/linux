@@ -32,6 +32,7 @@
 
 #include "radeon.h"
 
+#include "evergreend.h"
 /*
  * IB
  * IBs (Indirect Buffers) and areas of GPU accessible memory where
@@ -127,7 +128,188 @@ int radeon_ib_schedule(struct radeon_device *rdev, struct radeon_ib *ib,
 {
 	struct radeon_ring *ring = &rdev->ring[ib->ring];
 	int r = 0;
+	int draw = rdev->numFSuses;
 
+
+
+	printk("IB scheduled, dumping %d DWORDs\n",ib->length_dw);
+	int i;
+	int fb = 0;
+	/*for(i = 0; i < ib->length_dw; i++){
+		//printk("0x%x\n",ib->ptr[i]);
+		if(ib->ptr[i] == 0xc0002f00){ // num_instances
+			fb = 1; // prevents test image from being copied during the ring tests and resulting in a timeout. Triggering this via debugfs would probably be better, but whatever
+			//ib->ptr[i] = 0xc0001000;  // change to nop
+		}
+		if(ib->ptr[i] == 0xc0012d00 && draw == 0){ // draw_index_auto
+			ib->ptr[i] = 0xc0011000;  // change to nop
+			printk("FS start address hasn't been used yet, likely contains garbage. Patching out draw to avoid crash\n");
+			//ib->ptr[i+1] = 0x0; // change index_count to 0
+			//ib->ptr[i+2] = 0x42;// opaque draw and auto-increment index
+
+		}
+		if(ib->ptr[i] == 0xc0016900){
+			// set context reg
+			if(ib->ptr[i+1] == 0x217){
+				// SQ:SQ_PGM_START_VS
+				uint64_t startaddr = ib->ptr[i+2];
+				startaddr = startaddr << 8;	// address is saved 256 byte aligned
+				printk("VS start address: 0x%llX vram start: 0x%llX gtt start: 0x%llX\n",startaddr,rdev->mc.vram_start,rdev->mc.gtt_start);
+
+				int maxDwords = 200;	// max dwords read before aborting to not end up in an infinite loop
+				int dw;
+				printk("Dumping VS bytecode\n");
+				uint32_t shader[maxDwords + 1];
+				for(dw = 0; dw < maxDwords; dw++){
+					radeon_ring_lock(rdev,ring,7);
+						radeon_ring_write(ring,PACKET3(PACKET3_CP_DMA,4));
+						radeon_ring_write(ring,lower_32_bits(startaddr + (dw * 4)));
+						radeon_ring_write(ring,upper_32_bits(startaddr + (dw * 4)) & 0xFF);
+						radeon_ring_write(ring,lower_32_bits(rdev->shader_read_gpu));
+						radeon_ring_write(ring,upper_32_bits(rdev->shader_read_gpu) & 0xFF);
+						radeon_ring_write(ring,((4) & 0xFFFFF));
+
+						radeon_ring_unlock_commit(rdev,ring,false);
+						udelay(10);
+						uint32_t dword = readb(rdev->shader_read_cpu);
+						dword |= readb(rdev->shader_read_cpu + 1) << 8;
+						dword |= readb(rdev->shader_read_cpu + 2) << 16;
+						dword |= readb(rdev->shader_read_cpu + 3) << 24;
+						//printk("DWORD %d: 0x%X\n",dw,dword);
+						shader[dw] = dword;
+						if(dword == 0x95200688){
+							printk("done taking a dump\n");
+							break;
+						}
+						if(dword == 0x88062095){
+							printk("done throwing up\n");
+							break;
+						}
+				}
+				int nr;
+				for(nr = 0; nr < dw+1; nr += 2){
+					//printk("0x%X: 0x%X 0x%X",nr,shader[nr],shader[nr + 1]);
+				}
+			}
+
+			if(ib->ptr[i+1] == 0x210){
+							// SQ:SQ_PGM_START_PS
+							uint64_t startaddr = ib->ptr[i+2];
+							startaddr = startaddr << 8;	// address is saved 256 byte aligned
+							printk("PS start address: 0x%llX vram start: 0x%llX gtt start: 0x%llX\n",startaddr,rdev->mc.vram_start,rdev->mc.gtt_start);
+
+							int maxDwords = 200;	// max dwords read before aborting to not end up in an infinite loop
+							int dw;
+							printk("Dumping PS bytecode\n");
+							uint32_t shader[maxDwords + 1];
+							for(dw = 0; dw < maxDwords; dw++){
+								radeon_ring_lock(rdev,ring,7);
+									radeon_ring_write(ring,PACKET3(PACKET3_CP_DMA,4));
+									radeon_ring_write(ring,lower_32_bits(startaddr + (dw * 4)));
+									radeon_ring_write(ring,upper_32_bits(startaddr + (dw * 4)) & 0xFF);
+									radeon_ring_write(ring,lower_32_bits(rdev->shader_read_gpu));
+									radeon_ring_write(ring,upper_32_bits(rdev->shader_read_gpu) & 0xFF);
+									radeon_ring_write(ring,((4) & 0xFFFFF));
+
+									radeon_ring_unlock_commit(rdev,ring,false);
+									udelay(10);
+									uint32_t dword = readl(rdev->shader_read_cpu);
+									//printk("DWORD %d: 0x%X\n",dw,dword);
+									shader[dw] = dword;
+									if(dword == 0x95200688){
+										printk("done taking a dump\n");
+										break;
+									}
+									if(dword == 0x88062095){
+										printk("done throwing up\n");
+										break;
+									}
+							}
+							int nr;
+							for(nr = 0; nr < dw+1; nr += 2){
+								//printk("0x%X: 0x%X 0x%X",nr,shader[nr],shader[nr + 1]);
+							}
+						}
+			if(ib->ptr[i+1] == 0x229){
+							// SQ:SQ_PGM_START_FS
+							uint64_t startaddr = ib->ptr[i+2];
+							startaddr = startaddr << 8;	// address is saved 256 byte aligned
+							printk("FS start address: 0x%llX vram start: 0x%llX gtt start: 0x%llX\n",startaddr,rdev->mc.vram_start,rdev->mc.gtt_start);
+
+							int maxDwords = 200;	// max dwords read before aborting to not end up in an infinite loop
+							int dw;
+							printk("Dumping FS bytecode\n");
+							uint32_t shader[maxDwords + 1];
+							for(dw = 0; dw < maxDwords; dw++){
+								radeon_ring_lock(rdev,ring,7);
+									radeon_ring_write(ring,PACKET3(PACKET3_CP_DMA,4));
+									radeon_ring_write(ring,lower_32_bits(startaddr + (dw * 4)));
+									radeon_ring_write(ring,upper_32_bits(startaddr + (dw * 4)) & 0xFF);
+									radeon_ring_write(ring,lower_32_bits(rdev->shader_read_gpu));
+									radeon_ring_write(ring,upper_32_bits(rdev->shader_read_gpu) & 0xFF);
+									radeon_ring_write(ring,((4) & 0xFFFFF));
+
+									radeon_ring_unlock_commit(rdev,ring,false);
+									udelay(10);
+									uint32_t dword = readl(rdev->shader_read_cpu);
+									//printk("DWORD %d: 0x%X\n",dw,dword);
+									shader[dw] = dword;
+									if(dword == 0x95200688){
+										printk("done taking a dump\n");
+										break;
+									}
+									if(dword == 0x88062095){
+										printk("done throwing up\n");
+										break;
+									}
+							}
+							int nr;
+							for(nr = 0; nr < dw+1; nr += 2){
+								//printk("0x%X: 0x%X 0x%X",nr,shader[nr],shader[nr + 1]);
+							}
+							/*printk("copying FS code\n");
+							// first DWord
+							writel(0x95200688,rdev->shader_read_cpu);
+							radeon_ring_lock(rdev,ring,7);
+							radeon_ring_write(ring,PACKET3(PACKET3_CP_DMA,4));
+							radeon_ring_write(ring,lower_32_bits(rdev->shader_read_gpu));
+							radeon_ring_write(ring,upper_32_bits(rdev->shader_read_gpu) & 0xFF);
+							radeon_ring_write(ring,lower_32_bits(startaddr));
+							radeon_ring_write(ring,upper_32_bits(startaddr) & 0xFF);
+							radeon_ring_write(ring,((4) & 0xFFFFF));
+							radeon_ring_unlock_commit(rdev,ring,false);
+							udelay(10);
+							// second DWord
+							writel(0x0,rdev->shader_read_cpu);
+							radeon_ring_lock(rdev,ring,7);
+							radeon_ring_write(ring,PACKET3(PACKET3_CP_DMA,4));
+							radeon_ring_write(ring,lower_32_bits(rdev->shader_read_gpu));
+							radeon_ring_write(ring,upper_32_bits(rdev->shader_read_gpu) & 0xFF);
+							radeon_ring_write(ring,lower_32_bits(startaddr+4));
+							radeon_ring_write(ring,upper_32_bits(startaddr+4) & 0xFF);
+							radeon_ring_write(ring,((4) & 0xFFFFF));
+							radeon_ring_unlock_commit(rdev,ring,false);
+							udelay(10);*/
+							/*rdev->numFSuses++;
+						}
+		}
+	}
+	printk("patching out num_instances and draw_index_auto\n");*/
+
+	//DMA test image to FB
+	if(0){
+		radeon_ring_lock(rdev,ring,7);
+		radeon_ring_write(ring,PACKET3(PACKET3_CP_DMA,4));
+		radeon_ring_write(ring,lower_32_bits(rdev->rick_gpu));
+		radeon_ring_write(ring,upper_32_bits(rdev->rick_gpu) & 0xFF);
+		radeon_ring_write(ring,lower_32_bits(rdev->fb_gpu));
+		radeon_ring_write(ring,upper_32_bits(rdev->fb_gpu) & 0xFF);
+		radeon_ring_write(ring,(1920*1080*4) & 0xFFFFF);
+
+		radeon_ring_unlock_commit(rdev,ring,false);
+		printk("DMAd test image to FB\n");
+	}
+	radeon_gart_sync_all_for_device(rdev);
 	if (!ib->length_dw || !ring->ready) {
 		/* TODO: Nothings in the ib we should report. */
 		dev_err(rdev->dev, "couldn't schedule ib\n");
@@ -212,7 +394,7 @@ int radeon_ib_pool_init(struct radeon_device *rdev)
 		r = radeon_sa_bo_manager_init(rdev, &rdev->ring_tmp_bo,
 					      RADEON_IB_POOL_SIZE*64*1024,
 					      RADEON_GPU_PAGE_SIZE,
-					      RADEON_GEM_DOMAIN_GTT,0);
+					      RADEON_GEM_DOMAIN_GTT,RADEON_GEM_GTT_UC);
 	}
 	if (r) {
 		printk("error after radeon_sa_bo_manager_init: r=%d\n",r);

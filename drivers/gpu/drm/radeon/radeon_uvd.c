@@ -185,7 +185,7 @@ int radeon_uvd_init(struct radeon_device *rdev)
 		  RADEON_UVD_STACK_SIZE + RADEON_UVD_HEAP_SIZE +
 		  RADEON_UVD_SESSION_SIZE * rdev->uvd.max_handles;
 	r = radeon_bo_create(rdev, bo_size, PAGE_SIZE, true,
-			     RADEON_GEM_DOMAIN_VRAM, 0, NULL,
+			     RADEON_GEM_DOMAIN_VRAM, RADEON_GEM_GTT_UC, NULL,
 			     NULL, &rdev->uvd.vcpu_bo);
 	if (r) {
 		dev_err(rdev->dev, "(%d) failed to allocate UVD bo\n", r);

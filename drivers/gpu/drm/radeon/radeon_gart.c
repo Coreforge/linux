@@ -71,7 +71,7 @@
 int radeon_gart_table_ram_alloc(struct radeon_device *rdev)
 {
 	void *ptr;
-
+	printk("allocating GART in system memory usign dma_alloc_coherent. This likely does not work\n");
 	ptr = dma_alloc_coherent(&rdev->pdev->dev, rdev->gart.table_size,
 				 &rdev->gart.table_addr, GFP_KERNEL);
 	if (ptr == NULL) {
@@ -302,17 +302,17 @@ int radeon_gart_bind(struct radeon_device *rdev, unsigned offset,
 		WARN(1, "trying to bind memory to uninitialized GART !\n");
 		return -EINVAL;
 	}
-	t = offset / RADEON_GPU_PAGE_SIZE;
-	p = t / (PAGE_SIZE / RADEON_GPU_PAGE_SIZE);
+	t = offset / RADEON_GPU_PAGE_SIZE;		// number of radeon page
+	p = t / (PAGE_SIZE / RADEON_GPU_PAGE_SIZE);		// cpu page index (in GART)
 
-	for (i = 0; i < pages; i++, p++) {
-		rdev->gart.pages[p] = pagelist[i];
+	for (i = 0; i < pages; i++, p++) {			// loop over cpu pages
+		rdev->gart.pages[p] = pagelist[i];		// point cpu GART to page
 		page_base = dma_addr[i];
-		for (j = 0; j < (PAGE_SIZE / RADEON_GPU_PAGE_SIZE); j++, t++) {
+		for (j = 0; j < (PAGE_SIZE / RADEON_GPU_PAGE_SIZE); j++, t++) {		// loop over radeon pages for current cpu page
 			page_entry = radeon_gart_get_page_entry(page_base, flags);
-			rdev->gart.pages_entry[t] = page_entry;
+			rdev->gart.pages_entry[t] = page_entry;			// set radeon page entry
 			if (rdev->gart.ptr) {
-				radeon_gart_set_page(rdev, t, page_entry);
+				radeon_gart_set_page(rdev, t, page_entry);  // actually write to GART on the gpu
 			}
 			page_base += RADEON_GPU_PAGE_SIZE;
 		}
@@ -321,8 +321,25 @@ int radeon_gart_bind(struct radeon_device *rdev, unsigned offset,
 		mb();
 		radeon_gart_tlb_flush(rdev);
 	}
-	//printk("bound %d pages at dma address 0x%llx, offset 0x%llx\n", pages, dma_to_phys(rdev->dev,dma_addr),offset);
+	printk("bound %d pages at dma address 0x%llx", pages, *dma_addr);
 	return 0;
+}
+
+/**
+ * syncs all bound pages for the card (workaround for incoherent systems)
+ *
+ */
+void radeon_gart_sync_all_for_device(struct radeon_device *rdev){
+	int i;
+	printk("syncing all GART pages for device\n");
+	for (i = 0; i < rdev->gart.num_gpu_pages; i++){    // loop over all gpu pages
+        if(rdev->gart.pages_entry[i] == rdev->dummy_page.entry){
+        	continue;    // entry is just the dummy page, so it can be ignored
+        }
+        dma_sync_single_for_device(rdev->dev, rdev->gart.pages_entry[i] & 0xFFFFFFFFFFFFF000ULL, 4096, DMA_BIDIRECTIONAL);
+        dma_sync_single_for_cpu(rdev->dev, rdev->gart.pages_entry[i] & 0xFFFFFFFFFFFFF000ULL, 4096, DMA_BIDIRECTIONAL);
+	}
+
 }
 
 /**

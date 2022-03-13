@@ -499,6 +499,15 @@ static int radeon_crtc_page_flip_target(struct drm_crtc *crtc,
 	unsigned long flags;
 	int r;
 
+	int mut = mutex_is_locked(&rdev->move_bos_mutex);
+	printk("PFlip: move mutex is locked: %d\n",mut);
+	/*while(mut){
+		udelay(1);
+		mut = mutex_is_locked(&rdev->move_bos_mutex);
+		printk("PFlip: move mutex is locked: %d\n",mut);
+	}*/
+
+
 	work = kzalloc(sizeof *work, GFP_KERNEL);
 	if (work == NULL)
 		return -ENOMEM;

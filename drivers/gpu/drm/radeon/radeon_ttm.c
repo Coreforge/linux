@@ -160,7 +160,7 @@ static int radeon_move_blit(struct ttm_buffer_object *bo,
 	struct radeon_fence *fence;
 	unsigned num_pages;
 	int r, ridx;
-
+	//printk("move blit\n");
 	rdev = radeon_get_rdev(bo->bdev);
 	ridx = radeon_copy_ring_index(rdev);
 	old_start = (u64)old_mem->start << PAGE_SHIFT;
@@ -216,7 +216,7 @@ static int radeon_move_vram_ram(struct ttm_buffer_object *bo,
 	struct ttm_place placements;
 	struct ttm_placement placement;
 	int r;
-
+	printk("move vram ram\n");
 	tmp_mem = *new_mem;
 	tmp_mem.mm_node = NULL;
 	placement.num_placement = 1;
@@ -267,7 +267,7 @@ static int radeon_move_ram_vram(struct ttm_buffer_object *bo,
 	struct ttm_placement placement;
 	struct ttm_place placements;
 	int r;
-
+	printk("move ram vram\n");
 	tmp_mem = *new_mem;
 	tmp_mem.mm_node = NULL;
 	placement.num_placement = 1;
@@ -303,7 +303,7 @@ static int radeon_bo_move(struct ttm_buffer_object *bo, bool evict,
 	struct radeon_bo *rbo;
 	struct ttm_resource *old_mem = &bo->mem;
 	int r;
-
+	//new_mem = &bo->mem;
 	r = ttm_bo_wait(bo, ctx->interruptible, ctx->no_wait_gpu);
 	if (r)
 		return r;
@@ -331,7 +331,6 @@ static int radeon_bo_move(struct ttm_buffer_object *bo, bool evict,
 		/* use memcpy */
 		goto memcpy;
 	}
-
 	if (old_mem->mem_type == TTM_PL_VRAM &&
 	    new_mem->mem_type == TTM_PL_SYSTEM) {
 		r = radeon_move_vram_ram(bo, evict, ctx->interruptible,
@@ -347,6 +346,7 @@ static int radeon_bo_move(struct ttm_buffer_object *bo, bool evict,
 
 	if (r) {
 memcpy:
+		printk("using memcpy for move\n");
 		r = ttm_bo_move_memcpy(bo, ctx, new_mem);
 		if (r) {
 			return r;

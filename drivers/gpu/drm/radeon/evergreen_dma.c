@@ -68,7 +68,11 @@ void evergreen_dma_ring_ib_execute(struct radeon_device *rdev,
 				   struct radeon_ib *ib)
 {
 	struct radeon_ring *ring = &rdev->ring[ib->ring];
-
+	printk("executing dma ib, dumping buffer\n");
+	int i;
+		for(i = 0; i < ib->length_dw; i++){
+			printk("0x%x\n",ib->ptr[i]);
+		}
 	if (rdev->wb.enabled) {
 		u32 next_rptr = ring->wptr + 4;
 		while ((next_rptr & 7) != 5)
@@ -113,16 +117,55 @@ struct radeon_fence *evergreen_copy_dma(struct radeon_device *rdev,
 	struct radeon_fence *fence;
 	struct radeon_sync sync;
 	int ring_index = rdev->asic->copy.dma_ring_index;
+	//int ring_index = 0;
 	struct radeon_ring *ring = &rdev->ring[ring_index];
+	struct radeon_ring *ringgfx = &rdev->ring[0];
 	u32 size_in_dw, cur_size_in_dw;
 	int i, num_loops;
 	int r = 0;
 
 	radeon_sync_create(&sync);
-
+	//printk("evergreen copy dma\n");
 	size_in_dw = (num_gpu_pages << RADEON_GPU_PAGE_SHIFT) / 4;
 	num_loops = DIV_ROUND_UP(size_in_dw, 0xfffff);
+
+	/*int maxDwords = 200;	// max dwords read before aborting to not end up in an infinite loop
+					int dw;
+					printk("Dumping dma data\n");
+					uint32_t shader[maxDwords + 1];
+					for(dw = 0; dw < maxDwords; dw++){
+						radeon_ring_lock(rdev,ringgfx,7);
+							radeon_ring_write(ringgfx,PACKET3(PACKET3_CP_DMA,4));
+							radeon_ring_write(ringgfx,lower_32_bits(src_offset + (dw * 4)));
+							radeon_ring_write(ringgfx,upper_32_bits(src_offset + (dw * 4)) & 0xFF);
+							radeon_ring_write(ringgfx,lower_32_bits(rdev->shader_read_gpu));
+							radeon_ring_write(ringgfx,upper_32_bits(rdev->shader_read_gpu) & 0xFF);
+							radeon_ring_write(ringgfx,((4) & 0xFFFFF));
+
+							radeon_ring_unlock_commit(rdev,ringgfx,false);
+							udelay(10);
+							uint32_t dword = readb(rdev->shader_read_cpu);
+							dword |= readb(rdev->shader_read_cpu + 1) << 8;
+							dword |= readb(rdev->shader_read_cpu + 2) << 16;
+							dword |= readb(rdev->shader_read_cpu + 3) << 24;
+							//printk("DWORD %d: 0x%X\n",dw,dword);
+							shader[dw] = dword;
+							if(dword == 0x95200688){
+								//printk("done taking a dump\n");
+								break;
+							}
+							if(dword == 0x88062095){
+								//printk("done throwing up\n");
+								break;
+							}
+					}
+					int nr;
+					for(nr = 0; nr < dw+1; nr += 2){
+						//printk("0x%X: 0x%X 0x%X",nr,shader[nr],shader[nr + 1]);
+					}
+*/
 	r = radeon_ring_lock(rdev, ring, num_loops * 5 + 11);
+	//r = radeon_ring_lock(rdev, ring, num_loops * 6 + 11);
 	if (r) {
 		DRM_ERROR("radeon: moving bo (%d).\n", r);
 		radeon_sync_free(rdev, &sync, NULL);
@@ -136,12 +179,19 @@ struct radeon_fence *evergreen_copy_dma(struct radeon_device *rdev,
 		cur_size_in_dw = size_in_dw;
 		if (cur_size_in_dw > 0xFFFFF)
 			cur_size_in_dw = 0xFFFFF;
+		printk("copy dma loop %d of %d: copying 0x%X bytes from 0x%llX to 0x%llX",i,num_loops,cur_size_in_dw*4,src_offset,dst_offset);
 		size_in_dw -= cur_size_in_dw;
 		radeon_ring_write(ring, DMA_PACKET(DMA_PACKET_COPY, 0, cur_size_in_dw));
 		radeon_ring_write(ring, dst_offset & 0xfffffffc);
 		radeon_ring_write(ring, src_offset & 0xfffffffc);
 		radeon_ring_write(ring, upper_32_bits(dst_offset) & 0xff);
 		radeon_ring_write(ring, upper_32_bits(src_offset) & 0xff);
+		/*radeon_ring_write(ring,PACKET3(PACKET3_CP_DMA,4));
+		radeon_ring_write(ring,lower_32_bits(src_offset));
+		radeon_ring_write(ring,upper_32_bits(src_offset) & 0xFF);
+		radeon_ring_write(ring,lower_32_bits(dst_offset));
+		radeon_ring_write(ring,upper_32_bits(dst_offset) & 0xFF);
+		radeon_ring_write(ring,(cur_size_in_dw*4));*/
 		src_offset += cur_size_in_dw * 4;
 		dst_offset += cur_size_in_dw * 4;
 	}
@@ -155,7 +205,8 @@ struct radeon_fence *evergreen_copy_dma(struct radeon_device *rdev,
 
 	radeon_ring_unlock_commit(rdev, ring, false);
 	radeon_sync_free(rdev, &sync, fence);
-
+	r600_dma_ring_test(rdev, ring);
+	//mdelay(10);
 	return fence;
 }
 

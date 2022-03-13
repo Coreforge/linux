@@ -132,12 +132,12 @@ void radeon_ttm_placement_from_domain(struct radeon_bo *rbo, u32 domain)
 			   (rbo->rdev->flags & RADEON_IS_AGP)) {
 			rbo->placements[c].fpfn = 0;
 			rbo->placements[c].mem_type = TTM_PL_TT;
-			rbo->placements[c++].flags = TTM_PL_FLAG_WC |
+			rbo->placements[c++].flags = //TTM_PL_FLAG_WC |
 				TTM_PL_FLAG_UNCACHED;
 		} else {
 			rbo->placements[c].fpfn = 0;
 			rbo->placements[c].mem_type = TTM_PL_TT;
-			rbo->placements[c++].flags = TTM_PL_FLAG_CACHED;
+			rbo->placements[c++].flags = TTM_PL_FLAG_UNCACHED;
 		}
 	}
 
@@ -151,12 +151,12 @@ void radeon_ttm_placement_from_domain(struct radeon_bo *rbo, u32 domain)
 		    rbo->rdev->flags & RADEON_IS_AGP) {
 			rbo->placements[c].fpfn = 0;
 			rbo->placements[c].mem_type = TTM_PL_SYSTEM;
-			rbo->placements[c++].flags = TTM_PL_FLAG_WC |
+			rbo->placements[c++].flags = //TTM_PL_FLAG_WC |
 				TTM_PL_FLAG_UNCACHED;
 		} else {
 			rbo->placements[c].fpfn = 0;
 			rbo->placements[c].mem_type = TTM_PL_SYSTEM;
-			rbo->placements[c++].flags = TTM_PL_FLAG_CACHED;
+			rbo->placements[c++].flags = TTM_PL_FLAG_UNCACHED;
 		}
 	}
 	if (!c) {
@@ -554,8 +554,16 @@ int radeon_bo_list_validate(struct radeon_device *rdev,
 	INIT_LIST_HEAD(&duplicates);
 	r = ttm_eu_reserve_buffers(ticket, head, true, &duplicates);
 	if (unlikely(r != 0)) {
+		printk("Something went wrong reserving buffers (%d)\n",r);
 		return r;
 	}
+
+
+		/*if(rdev->moved_bos){
+			rdev->nMovedBos = 0;
+			//kfree(rdev->moved_bos);		// we're moving new stuff, delete the old array
+			printk(KERN_WARNING"Warning: deleting old BO moved array. May or may not be supposed to do this!\n");
+		}*/
 
 	list_for_each_entry(lobj, head, tv.head) {
 		struct radeon_bo *bo = lobj->robj;
@@ -564,6 +572,21 @@ int radeon_bo_list_validate(struct radeon_device *rdev,
 			u32 allowed = lobj->allowed_domains;
 			u32 current_domain =
 				radeon_mem_type_to_domain(bo->tbo.mem.mem_type);
+
+				/*rdev->nMovedBos++;	// one more moved bo
+				rdev->moved_bos = krealloc(rdev->moved_bos,sizeof(struct radeon_bo*)*rdev->nMovedBos,GFP_KERNEL);	// realloc array of the proper size
+				rdev->moved_bos[rdev->nMovedBos-1] = bo;
+			if(rdev->trackMoves){
+				//printk("Tracking BO moves to reverse them later\n");
+				struct radeon_bo_list* moved_list_entry = kmalloc(sizeof(struct radeon_bo_list),GFP_KERNEL);
+				memcpy(moved_list_entry, lobj,sizeof(struct radeon_bo_list));	// copy the entry for this buffer
+				moved_list_entry->preferred_domains = RADEON_GEM_DOMAIN_GTT;	// set the preferred and allowed domains of the copy to the current domains
+				moved_list_entry->allowed_domains = RADEON_GEM_DOMAIN_GTT;		// the rest doesn't need to be changes and can just stay the same
+				//moved_list_entry->bo = bo;
+				list_add_tail(&moved_list_entry->tv.head,&rdev->move_bo_head);
+			}*/
+
+			//printk("moving from domain %d to %d\n",current_domain,domain);
 
 			/* Check if this buffer will be moved and don't move it
 			 * if we have moved too many buffers for this IB already.
@@ -578,6 +601,7 @@ int radeon_bo_list_validate(struct radeon_device *rdev,
 			    bytes_moved > bytes_moved_threshold) {
 				/* don't move it */
 				domain = current_domain;
+				printk("not moving\n");
 			}
 
 		retry:
@@ -590,6 +614,28 @@ int radeon_bo_list_validate(struct radeon_device *rdev,
 			bytes_moved += atomic64_read(&rdev->num_bytes_moved) -
 				       initial_bytes_moved;
 
+			// create new bo and copy the contents of the old one into the new one without moving the old one
+			// this allows the kernel driver to put the bos where it needs them while userspace can write to the old ones
+			/*struct radeon_bo *new_bo;
+			void* bo_cpu;
+			r = radeon_bo_create(rdev,radeon_bo_size(bo),PAGE_SIZE,true,domain,0,NULL,NULL,&new_bo);
+			r = radeon_bo_reserve(new_bo,false);
+			r = radeon_bo_pin(new_bo,domain,NULL);
+			r = radeon_bo_kmap(new_bo,bo_cpu);
+			radeon_bo_unreserve(new_bo);
+			if(bo->kptr){
+				int i;
+				for(i = 0; i < radeon_bo_size(bo); i++){
+					writeb(readb(bo->kptr + 1),bo_cpu + i);
+				}
+				printk("copied data into bo copy\n");
+			} else {
+				printk("bo doesn't have kptr, can't copy data into the copy\n");
+			}
+			rdev->moved_bos[rdev->nMovedBos-1] = new_bo;
+			bo = new_bo;
+			lobj->robj = new_bo;
+*/
 			if (unlikely(r)) {
 				if (r != -ERESTARTSYS &&
 				    domain != lobj->allowed_domains) {
@@ -602,6 +648,8 @@ int radeon_bo_list_validate(struct radeon_device *rdev,
 		}
 		lobj->gpu_offset = radeon_bo_gpu_offset(bo);
 		lobj->tiling_flags = bo->tiling_flags;
+		//printk("gpu address: 0x%llX\n",lobj->gpu_offset);
+		//printk("moved 0x%llX bytes of max 0x%llX\n",bytes_moved, bytes_moved_threshold);
 	}
 
 	list_for_each_entry(lobj, &duplicates, tv.head) {

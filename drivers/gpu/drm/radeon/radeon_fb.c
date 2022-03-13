@@ -187,7 +187,7 @@ static int radeonfb_create_pinned_object(struct radeon_fbdev *rfbdev,
 	/* Only 27 bit offset for legacy CRTC */
 	ret = radeon_bo_pin_restricted(rbo, RADEON_GEM_DOMAIN_VRAM,
 				       ASIC_IS_AVIVO(rdev) ? 0 : 1 << 27,
-				       NULL);
+				       &rdev->fb_gpu);
 	if (ret) {
 		radeon_bo_unreserve(rbo);
 		goto out_unref;
@@ -254,7 +254,7 @@ static int radeonfb_create(struct drm_fb_helper *helper,
 
 	mode_cmd.width = sizes->surface_width;
 	mode_cmd.height = sizes->surface_height;
-
+	printk("radeonfb_create\n");
 	/* avivo can't scanout real 24bpp */
 	if ((sizes->surface_bpp == 24) && ASIC_IS_AVIVO(rdev))
 		sizes->surface_bpp = 32;

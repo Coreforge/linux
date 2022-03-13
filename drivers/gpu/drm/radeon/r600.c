@@ -2623,7 +2623,7 @@ u32 r600_gfx_get_rptr(struct radeon_device *rdev,
 		rptr = rdev->wb.wb[ring->rptr_offs/4];
 	else
 		rptr = RREG32(R600_CP_RB_RPTR);
-
+	mb(); //CHANGED
 	return rptr;
 }
 
@@ -3491,7 +3491,7 @@ int r600_ih_ring_alloc(struct radeon_device *rdev)
 	if (rdev->ih.ring_obj == NULL) {
 		r = radeon_bo_create(rdev, rdev->ih.ring_size,
 				     PAGE_SIZE, true,
-				     RADEON_GEM_DOMAIN_GTT, 0,
+				     RADEON_GEM_DOMAIN_VRAM, 0,		//CHANGED: GTT to VRAM
 				     NULL, NULL, &rdev->ih.ring_obj);
 		if (r) {
 			DRM_ERROR("radeon: failed to create ih ring buffer (%d).\n", r);
@@ -3501,7 +3501,7 @@ int r600_ih_ring_alloc(struct radeon_device *rdev)
 		if (unlikely(r != 0))
 			return r;
 		r = radeon_bo_pin(rdev->ih.ring_obj,
-				  RADEON_GEM_DOMAIN_GTT,
+				  RADEON_GEM_DOMAIN_VRAM,		//CHANGED: GTT to VRAM
 				  &rdev->ih.gpu_addr);
 		if (r) {
 			radeon_bo_unreserve(rdev->ih.ring_obj);
@@ -4046,9 +4046,10 @@ static u32 r600_get_ih_wptr(struct radeon_device *rdev)
 {
 	u32 wptr, tmp;
 
-	if (rdev->wb.enabled)
-		wptr = le32_to_cpu(rdev->wb.wb[R600_WB_IH_WPTR_OFFSET/4]);
-	else
+	if (rdev->wb.enabled){
+		wptr = le32_to_cpu(rdev->wb.wb[R600_WB_IH_WPTR_OFFSET/4]);	//CHANGED
+		mb();
+	}else
 		wptr = RREG32(IH_RB_WPTR);
 
 	if (wptr & RB_OVERFLOW) {

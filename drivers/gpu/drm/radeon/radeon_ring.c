@@ -30,9 +30,9 @@
 #include <drm/drm_debugfs.h>
 #include <drm/drm_device.h>
 #include <drm/drm_file.h>
-
+#include "rick.h"
 #include "radeon.h"
-
+#include "evergreend.h"
 /*
  * Rings
  * Most engines on the GPU are fed via ring buffers.  Ring
@@ -47,6 +47,8 @@
  * them until the pointers are equal again.
  */
 static int radeon_debugfs_ring_init(struct radeon_device *rdev, struct radeon_ring *ring);
+
+struct radeon_device *rdev2;	// used to pass the pointer to the debugfs function
 
 /**
  * radeon_ring_supports_scratch_reg - check if the ring supports
@@ -182,6 +184,19 @@ void radeon_ring_commit(struct radeon_device *rdev, struct radeon_ring *ring,
 		//printk("padded with nop\n");
 	}
 	mb();
+	__iowmb();
+	dsb(sy);
+	int numdw;
+	int i;
+	numdw = ring->wptr - ring->wptr_old;
+	//printk("commiting %d DWords\n",numdw);
+	//char* buf = vzalloc(numdw*9);
+	for(i = 0; i < numdw; i++){
+		//sprintf(&buf[i*9],"%x ", ring->ring[(ring->wptr_old+i) & ring->ptr_mask]);
+		//printk("0x%x\n",ring->ring[(ring->wptr_old+i) & ring->ptr_mask]);
+	}
+	//printk("commiting %d dwords on ring. DWords: %s\n",numdw,buf);
+	//vfree(buf);
 	/* If we are emitting the HDP flush via MMIO, we need to do it after
 	 * all CPU writes to VRAM finished.
 	 */
@@ -266,10 +281,25 @@ bool radeon_ring_test_lockup(struct radeon_device *rdev, struct radeon_ring *rin
 		return false;
 	}
 
+	printk("ring 0  RPTR: 0x%x WPTR: 0x%x\n",RREG32(R600_CP_RB_RPTR),RREG32(R600_CP_RB_WPTR));
+	printk("VGT_CNTL_STATUS: 0x%X DMA_RB_CNTL: 0x%X\n",RREG32(0x88f0),RREG32(0xd000));
+	printk("SX:SX_EXPORT_BUFFER_SIZES: 0x%X\n",RREG32(0x900c));
+	printk("SX:SX_MEMORY_EXPORT_BASE: 0x%X\n",RREG32(0x9010));
+	printk("SX:SX_MEMORY_EXPORT_SIZE: 0x%X\n",RREG32(0x9014));
+	printk("GRBM_STATUS: 0x%X SRBM_STATUS: 0x%X SRBM_STATUS2: 0x%X\n",RREG32(0x8010),RREG32(0x0e50),RREG32(0x0ec4));
 	elapsed = jiffies_to_msecs(jiffies_64 - last);
 	if (radeon_lockup_timeout && elapsed >= radeon_lockup_timeout) {
 		dev_err(rdev->dev, "ring %d stalled for more than %llumsec\n",
 			ring->idx, elapsed);
+		/*int size = RREG32(R600_CP_RB_WPTR) - RREG32(R600_CP_RB_RPTR);
+		if(size > 64){
+			size = 64;
+		}
+
+		void* tmp = kmalloc(size, GFP_KERNEL);
+		memcpy(tmp,&ring->ring[RREG32(R600_CP_RB_RPTR)],size);
+		printk("dumping %d bytes after rptr: %*ph",size,tmp);
+		kfree(tmp);*/
 		return true;
 	}
 	/* give a chance to the GPU ... */
@@ -370,6 +400,215 @@ int radeon_ring_restore(struct radeon_device *rdev, struct radeon_ring *ring,
 	return 0;
 }
 
+// DebugFS file ops
+
+
+u64 retval = 42069;
+
+int bo_test_read (void *data, u64* value){
+	struct radeon_ring *ring;
+	struct radeon_bo src_obj;
+	struct radeon_bo* src = &src_obj;
+	uint64_t src_gpu;
+	void* src_cpu;
+	struct radeon_bo dst_obj;
+	struct radeon_bo* dst = &dst_obj;
+	uint64_t dst_gpu;
+	void* dst_cpu;
+	struct radeon_device *rdev = (struct radeon_device *)data;
+	ring = &rdev->ring[0];	// use the GFX ring1
+	char testValues[] = {42,0,69,13,37,10,187,55,117,35};
+	char readBack[100];
+	char sbuf[410];
+	*value = 0;
+	int r;
+	int i;
+	// create src bo
+	r = radeon_bo_create(rdev, 10,PAGE_SIZE,true,RADEON_GEM_DOMAIN_VRAM,0,NULL,NULL,&src);
+	printk("rick addresses: source img: 0x%llX bo cpu addr: 0x%llX bo gpu addr: 0x%llX\n",testValues,src_cpu,src_gpu);
+	if(r){
+		printk("rick init error\n");
+		return 0;
+	}
+	printk("rick bo init\n");
+	r = radeon_bo_reserve(src,false);
+	printk("rick addresses: source img: 0x%llX bo cpu addr: 0x%llX bo gpu addr: 0x%llX\n",testValues,src_cpu,src_gpu);
+	if(r){
+		printk("rick init reserve error\n");
+		return 0;
+	}
+	printk("rick bo reserve\n");
+	r = radeon_bo_pin(src,RADEON_GEM_DOMAIN_VRAM,&src_gpu);
+	printk("rick addresses: source img: 0x%llX bo cpu addr: 0x%llX bo gpu addr: 0x%llX\n",testValues,src_cpu,src_gpu);
+	if(r){
+		printk("rick init pin error\n");
+		return 0;
+	}
+	printk("rick bo pin\n");
+	r = radeon_bo_kmap(src,(void**)&src_cpu);
+	printk("rick addresses: source img: 0x%llX bo cpu addr: 0x%llX bo gpu addr: 0x%llX\n",testValues,src_cpu,src_gpu);
+	printk("rick bo kmap\n");
+	radeon_bo_unreserve(src);
+	printk("rick bo unreserve\n");
+	if(r){
+		printk("rick init kmap error\n");
+		return 0;
+	}
+	*value = 69;
+	// create dst bo
+	r = radeon_bo_create(rdev, 10,PAGE_SIZE,true,RADEON_GEM_DOMAIN_GTT,0,NULL,NULL,&dst);
+	printk("rick addresses: source img: 0x%llX bo cpu addr: 0x%llX bo gpu addr: 0x%llX\n",testValues,dst_cpu,dst_gpu);
+	if(r){
+		printk("rick init error\n");
+		return 0;
+	}
+	printk("rick bo init\n");
+	r = radeon_bo_reserve(dst,false);
+	printk("rick addresses: source img: 0x%llX bo cpu addr: 0x%llX bo gpu addr: 0x%llX\n",testValues,dst_cpu,dst_gpu);
+	if(r){
+		printk("rick init reserve error\n");
+		return 0;
+	}
+	printk("rick bo reserve\n");
+	r = radeon_bo_pin(dst,RADEON_GEM_DOMAIN_GTT,&dst_gpu);
+	printk("rick addresses: source img: 0x%llX bo cpu addr: 0x%llX bo gpu addr: 0x%llX\n",testValues,dst_cpu,dst_gpu);
+	if(r){
+		printk("rick init pin error\n");
+		return 0;
+	}
+	printk("rick bo pin\n");
+	r = radeon_bo_kmap(dst,(void**)&dst_cpu);
+	printk("rick addresses: source img: 0x%llX bo cpu addr: 0x%llX bo gpu addr: 0x%llX\n",testValues,dst_cpu,dst_gpu);
+	printk("rick bo kmap\n");
+	radeon_bo_unreserve(dst);
+	printk("rick bo unreserve\n");
+	if(r){
+		printk("rick init kmap error\n");
+		return 0;
+	}
+	// writing test buffer
+	for(i = 0; i < 10; i++){
+		writeb(testValues[i], src_cpu + i);
+	}
+
+	for(i = 0; i < 10; i++){
+		readBack[i] = readb(src_cpu + i);
+	}
+
+	printk("read back DMA src Buffer %d %d %d %d %d %d %d %d %d %d\n",readBack[0],readBack[1],readBack[2],readBack[3],readBack[4],readBack[5],readBack[6],readBack[7],readBack[8],readBack[9]);
+	int addr = 0;
+	int tmp;
+	for(i = 0; i < 100; i++){
+		readBack[i] = readb(dst_cpu + i);
+		tmp = snprintf(sbuf + (addr),5," %d",readBack[i]);
+		if(tmp > 4){
+			tmp = 4;
+		}
+		addr += tmp;
+	}
+
+	printk("read back DMA dst Buffer before DMA %s\n",sbuf);
+	//printk("read back DMA dst Buffer before DMA %d %d %d %d %d %d %d %d %d %d\n",readBack[0],readBack[1],readBack[2],readBack[3],readBack[4],readBack[5],readBack[6],readBack[7],readBack[8],readBack[9]);
+
+	radeon_ring_lock(rdev,ring,7);
+	radeon_ring_write(ring,PACKET3(PACKET3_CP_DMA,4));
+	radeon_ring_write(ring,lower_32_bits(src_gpu));
+	radeon_ring_write(ring,upper_32_bits(src_gpu) & 0xFF);
+	radeon_ring_write(ring,lower_32_bits(dst_gpu));
+	radeon_ring_write(ring,upper_32_bits(dst_gpu) & 0xFF);
+	radeon_ring_write(ring,((8) & 0xFFFFF) | PACKET3_CP_DMA_DIS_WC | PACKET3_CP_DMA_ENGINE(0));
+
+	radeon_ring_unlock_commit(rdev,ring,false);
+	udelay(10000);
+	addr = 0;
+	for(i = 0; i < 10; i++){
+		readBack[i] = readb(dst_cpu + i);
+		tmp = snprintf(sbuf + (addr),5," %d",readBack[i]);
+		if(tmp > 4){
+			tmp = 4;
+		}
+		addr += tmp;
+	}
+	printk("read back DMA dst Buffer after DMA %s\n",sbuf);
+	//printk("read back DMA dst Buffer %d %d %d %d %d %d %d %d %d %d\n",readBack[0],readBack[1],readBack[2],readBack[3],readBack[4],readBack[5],readBack[6],readBack[7],readBack[8],readBack[9]);
+
+	for(i = 0; i < 100; i++){
+		readBack[i] = readb(src_cpu + i);
+	}
+
+	printk("read back DMA src Buffer after DMA %d %d %d %d %d %d %d %d %d %d\n",readBack[0],readBack[1],readBack[2],readBack[3],readBack[4],readBack[5],readBack[6],readBack[7],readBack[8],readBack[9]);
+
+	*value = 420;
+	return 0;
+}
+
+
+int rick_read (void *data, u64* value){
+	struct radeon_ring *ring;
+	struct radeon_device *rdev = (struct radeon_device *)data;
+	struct radeon_ring *dma_ring;
+
+	dma_ring = &rdev->ring[rdev->asic->copy.dma_ring_index];
+	ring = &rdev->ring[0];	// use the GFX ring1
+	printk("DMAing test image to FB (debugfs read trigger)\n");
+	*value = retval;
+
+	radeon_ring_lock(rdev, dma_ring, 5);
+	radeon_ring_write(ring, DMA_PACKET(DMA_PACKET_COPY, 0x40, 0xfffff/4));
+				radeon_ring_write(ring, rdev->fb_gpu & 0xfffffffc);
+				radeon_ring_write(ring, rdev->rick_gpu & 0xfffffffc);
+				radeon_ring_write(ring, upper_32_bits(rdev->fb_gpu) & 0xff);
+				radeon_ring_write(ring, upper_32_bits(rdev->rick_gpu) & 0xff);
+				radeon_ring_unlock_commit(rdev,dma_ring,false);
+
+
+	//radeon_ring_lock(rdev,ring,18);
+
+			/*radeon_ring_write(ring,PACKET3(PACKET3_CP_DMA,4));
+			radeon_ring_write(ring,lower_32_bits(rdev2->rick_gpu));
+			radeon_ring_write(ring,upper_32_bits(rdev2->rick_gpu) & 0xFF);
+			radeon_ring_write(ring,lower_32_bits(rdev2->fb_gpu));
+			radeon_ring_write(ring,upper_32_bits(rdev2->fb_gpu) & 0xFF);
+			radeon_ring_write(ring,(0x1fffff));
+			*/
+			//dma ring copy first segment
+			/*radeon_ring_write(ring, DMA_PACKET(DMA_PACKET_COPY, 0, 0xfffff/4));
+			radeon_ring_write(ring, rdev->fb_gpu & 0xfffffffc);
+			radeon_ring_write(ring, rdev->rick_gpu & 0xfffffffc);
+			radeon_ring_write(ring, upper_32_bits(rdev->fb_gpu) & 0xff);
+			radeon_ring_write(ring, upper_32_bits(rdev->rick_gpu) & 0xff);
+			radeon_ring_unlock_commit(rdev,dma_ring,false);*/
+
+			/*radeon_ring_write(ring,PACKET3(PACKET3_CP_DMA,4));
+			radeon_ring_write(ring,lower_32_bits(rdev2->rick_gpu + 0x1fffff));
+			radeon_ring_write(ring,upper_32_bits(rdev2->rick_gpu + 0x1fffff) & 0xFF);
+			radeon_ring_write(ring,lower_32_bits(rdev2->fb_gpu + 0x1fffff));
+			radeon_ring_write(ring,upper_32_bits(rdev2->fb_gpu + 0x1fffff) & 0xFF);
+			radeon_ring_write(ring,(0x1fffff));
+
+			radeon_ring_write(ring,PACKET3(PACKET3_CP_DMA,4));
+			radeon_ring_write(ring,lower_32_bits(rdev2->rick_gpu + 0x1fffff + 0x1fffff));
+			radeon_ring_write(ring,upper_32_bits(rdev2->rick_gpu + 0x1fffff + 0x1fffff) & 0xFF);
+			radeon_ring_write(ring,lower_32_bits(rdev2->fb_gpu + 0x1fffff + 0x1fffff));
+			radeon_ring_write(ring,upper_32_bits(rdev2->fb_gpu + 0x1fffff + 0x1fffff) & 0xFF);
+			radeon_ring_write(ring,(0x1fffff));
+
+			radeon_ring_write(ring,PACKET3(PACKET3_CP_DMA,4));
+			radeon_ring_write(ring,lower_32_bits(rdev2->rick_gpu + 0x1fffff + 0x1fffff + 0x1fffff));
+			radeon_ring_write(ring,upper_32_bits(rdev2->rick_gpu + 0x1fffff + 0x1fffff + 0x1fffff) & 0xFF);
+			radeon_ring_write(ring,lower_32_bits(rdev2->fb_gpu + 0x1fffff + 0x1fffff + 0x1fffff));
+			radeon_ring_write(ring,upper_32_bits(rdev2->fb_gpu + 0x1fffff + 0x1fffff + 0x1fffff) & 0xFF);
+			radeon_ring_write(ring,(0x1e9003));
+
+			radeon_ring_unlock_commit(rdev,ring,false);*/
+			printk("DMAd test image to FB\n");
+	return 0;
+}
+
+//DEFINE_SIMPLE_ATTRIBUTE(rickops,NULL,rick_write,"%llu\n");
+DEFINE_DEBUGFS_ATTRIBUTE(rickops,rick_read,NULL,"%lld\n");
+DEFINE_DEBUGFS_ATTRIBUTE(botestops,bo_test_read,NULL,"%lld\n");
+
 /**
  * radeon_ring_init - init driver ring struct.
  *
@@ -393,7 +632,7 @@ int radeon_ring_init(struct radeon_device *rdev, struct radeon_ring *ring, unsig
 	/* Allocate ring buffer */
 	if (ring->ring_obj == NULL) {
 		r = radeon_bo_create(rdev, ring->ring_size, PAGE_SIZE, true,
-				     RADEON_GEM_DOMAIN_GTT, 0, NULL,
+				     RADEON_GEM_DOMAIN_GTT, 0, NULL,		//CHANGED: GTT to VRAM
 				     NULL, &ring->ring_obj);
 		if (r) {
 			dev_err(rdev->dev, "(%d) ring create failed\n", r);
@@ -402,7 +641,7 @@ int radeon_ring_init(struct radeon_device *rdev, struct radeon_ring *ring, unsig
 		r = radeon_bo_reserve(ring->ring_obj, false);
 		if (unlikely(r != 0))
 			return r;
-		r = radeon_bo_pin(ring->ring_obj, RADEON_GEM_DOMAIN_GTT,
+		r = radeon_bo_pin(ring->ring_obj, RADEON_GEM_DOMAIN_GTT,	//CHANGED: GTT to VRAM
 					&ring->gpu_addr);
 		if (r) {
 			radeon_bo_unreserve(ring->ring_obj);
@@ -428,6 +667,96 @@ int radeon_ring_init(struct radeon_device *rdev, struct radeon_ring *ring, unsig
 		DRM_ERROR("Failed to register debugfs file for rings !\n");
 	}
 	radeon_ring_lockup_update(rdev, ring);
+
+	// creating 4 byte (dword) bo to dma shader code to to make sure it's correct (the registers only have the gpu address, so reading directly won't really work that easily and it's easier to just dma the data into a buffer)
+	if(rdev->shader_read_bo){
+		// we only need one bo
+		goto rick;
+	}
+	r = radeon_bo_create(rdev,4,PAGE_SIZE,true,RADEON_GEM_DOMAIN_VRAM,0,NULL,NULL,&rdev->shader_read_bo);
+	if(r){
+		printk("shader bo creation error");
+		goto rick;
+	}
+	r = radeon_bo_reserve(rdev->shader_read_bo, false);
+	if(r){
+		printk("shader bo creation error");
+		goto rick;
+	}
+	r = radeon_bo_pin(rdev->shader_read_bo,RADEON_GEM_DOMAIN_VRAM,&rdev->shader_read_gpu);
+	if(r){
+		printk("shader bo creation error");
+		goto rick;
+	}
+	r = radeon_bo_kmap(rdev->shader_read_bo,(void**)&rdev->shader_read_cpu);
+	radeon_bo_unreserve(rdev->shader_read_bo);
+	if(r){
+		printk("shader bo creation error");
+		goto rick;
+	}
+
+
+	rick:
+	if(rdev->rick){
+		return 0;	// one rick is enough
+	}
+	//DMA test init (just putting this here because)
+	r = radeon_bo_create(rdev, 1920*1080*4,PAGE_SIZE,true,RADEON_GEM_DOMAIN_GTT,0,NULL,NULL,&rdev->rick);
+	printk("rick addresses: source img: 0x%llX bo cpu addr: 0x%llX bo gpu addr: 0x%llX\n",rawData,rdev->rick_cpu,rdev->rick_gpu);
+	if(r){
+		printk("rick init error\n");
+		return 0;
+	}
+	printk("rick bo init\n");
+	r = radeon_bo_reserve(rdev->rick,false);
+	printk("rick addresses: source img: 0x%llX bo cpu addr: 0x%llX bo gpu addr: 0x%llX\n",rawData,rdev->rick_cpu,rdev->rick_gpu);
+	if(r){
+		printk("rick init reserve error\n");
+		return 0;
+	}
+	printk("rick bo reserve\n");
+	r = radeon_bo_pin(rdev->rick,RADEON_GEM_DOMAIN_GTT,&rdev->rick_gpu);
+	printk("rick addresses: source img: 0x%llX bo cpu addr: 0x%llX bo gpu addr: 0x%llX\n",rawData,rdev->rick_cpu,rdev->rick_gpu);
+	if(r){
+		printk("rick init pin error\n");
+		return 0;
+	}
+	printk("rick bo pin\n");
+	r = radeon_bo_kmap(rdev->rick,(void**)&rdev->rick_cpu);
+	printk("rick addresses: source img: 0x%llX bo cpu addr: 0x%llX bo gpu addr: 0x%llX\n",rawData,rdev->rick_cpu,rdev->rick_gpu);
+	printk("rick bo kmap\n");
+	radeon_bo_unreserve(rdev->rick);
+	printk("rick bo unreserve\n");
+	if(r){
+		printk("rick init kmap error\n");
+		return 0;
+	}
+	//image buffer allocated
+	printk("rick addresses: source img: 0x%llX bo cpu addr: 0x%llX bo gpu addr: 0x%llX\n",rawData,rdev->rick_cpu,rdev->rick_gpu);
+	uint64_t i;
+	uint64_t addr = 0;
+	for(i = 0; i < (1920*1080*4) - 4 ; i += 4){
+		writeb(rawData[addr], rdev->rick_cpu + i);
+		writeb(rawData[addr + 1], rdev->rick_cpu + i + 1);
+		writeb(rawData[addr + 2], rdev->rick_cpu + i + 2);
+		addr += 3;
+		writeb(0xff, rdev->rick_cpu + i + 3);
+	}
+	printk("test image copied to bo\n");
+
+	rdev2 = rdev;
+	//create DebugFS file to trigger DMA transfer of test image to FB
+	struct dentry *rickdir;
+	rickdir = debugfs_create_dir("rickDMA",NULL);
+	if(rickdir == -ENODEV){
+		printk("no debugfs support\n");
+		return 0;
+	}
+	//struct file_operations rickops;
+	//rickops.write = &rick_write;
+
+
+
 	return 0;
 }
 
@@ -550,6 +879,8 @@ static int radeon_debugfs_ring_init(struct radeon_device *rdev, struct radeon_ri
 {
 #if defined(CONFIG_DEBUG_FS)
 	unsigned i;
+	debugfs_create_file("triggerDMA",0444,rdev->ddev->primary->debugfs_root,rdev,&rickops);
+	debugfs_create_file("bo_test_dma",0444,rdev->ddev->primary->debugfs_root,rdev,&botestops);
 	for (i = 0; i < ARRAY_SIZE(radeon_debugfs_ring_info_list); ++i) {
 		struct drm_info_list *info = &radeon_debugfs_ring_info_list[i];
 		int ridx = *(int*)radeon_debugfs_ring_info_list[i].data;

@@ -834,7 +834,7 @@ int radeon_fence_driver_start_ring(struct radeon_device *rdev, int ring)
 {
 	uint64_t index;
 	int r;
-
+	rdev->fence_drv[ring].dma_addr = NULL;
 	radeon_scratch_free(rdev, rdev->fence_drv[ring].scratch_reg);
 	if (rdev->wb.use_event || !radeon_ring_supports_scratch_reg(rdev, &rdev->ring[ring])) {
 		rdev->fence_drv[ring].scratch_reg = 0;
@@ -843,6 +843,7 @@ int radeon_fence_driver_start_ring(struct radeon_device *rdev, int ring)
 			rdev->fence_drv[ring].cpu_addr = &rdev->wb.wb[index/4];
 			rdev->fence_drv[ring].gpu_addr = rdev->wb.gpu_addr +
 							 index;
+			//create DMA mapping to sync (shouldn't be needed as it's a mapped bo)
 
 		} else {
 			/* put fence directly behind firmware */

@@ -370,6 +370,7 @@ struct radeon_fence_driver {
 	atomic64_t			last_seq;
 	bool				initialized, delayed_irq;
 	struct delayed_work		lockup_work;
+	dma_addr_t dma_addr;
 };
 
 struct radeon_fence {
@@ -673,6 +674,8 @@ void radeon_gart_unbind(struct radeon_device *rdev, unsigned offset,
 int radeon_gart_bind(struct radeon_device *rdev, unsigned offset,
 		     int pages, struct page **pagelist,
 		     dma_addr_t *dma_addr, uint32_t flags);
+
+void radeon_gart_sync_all_for_device(struct radeon_device *rdev);
 
 
 /*
@@ -2310,6 +2313,12 @@ struct radeon_atcs {
 typedef uint32_t (*radeon_rreg_t)(struct radeon_device*, uint32_t);
 typedef void (*radeon_wreg_t)(struct radeon_device*, uint32_t, uint32_t);
 
+struct moved_bos_entry{
+	struct radeon_bo* bo;
+	struct list_head list;
+};
+
+
 struct radeon_device {
 	struct device			*dev;
 	struct drm_device		*ddev;
@@ -2454,6 +2463,25 @@ struct radeon_device {
 	/* tracking pinned memory */
 	u64 vram_pin_size;
 	u64 gart_pin_size;
+	struct radeon_bo *rick;
+	uint64_t rick_gpu;
+	void *rick_cpu;
+	uint64_t fb_gpu;
+
+	// reading back shader code for debugging
+	struct radeon_bo* shader_read_bo;
+	uint64_t shader_read_gpu;
+	void* shader_read_cpu;
+
+	// needed because of weird stuff
+	int numFSuses;
+
+	// tracking moved BOs to move them back after CS execution
+	struct radeon_bo** moved_bos;	// array of pointers to the BOs that were moved
+	int nMovedBos;	// number of BOs moved (determines size of array)
+	struct mutex move_bos_mutex;
+	struct list_head move_bo_head;
+	bool trackMoves;	// enables or disables tracking of the BO moves to avoid tracking while moving the BOs back after CS execution
 };
 
 bool radeon_is_px(struct drm_device *dev);
@@ -2693,7 +2721,10 @@ static inline void radeon_ring_write(struct radeon_ring *ring, uint32_t v)
 {
 	if (ring->count_dw <= 0)
 		DRM_ERROR("radeon: writing more dwords to the ring than expected!\n");
-
+	/*if(v == 0xc0023200){
+		printk("replacing IB operation with Nop\n");
+		v = 0xc0021000;
+	}*/
 	ring->ring[ring->wptr++] = v;
 	//mb();
 	ring->wptr &= ring->ptr_mask;

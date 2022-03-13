@@ -1706,6 +1706,7 @@ static int evergreen_cs_handle_reg(struct radeon_cs_parser *p, u32 reg, u32 idx)
 			return -EINVAL;
 		}
 		ib[idx] += (u32)((reloc->gpu_offset >> 8) & 0xffffffff);
+		//printk("ib reloc! gpu offset 0x%llX place: 0x%lX preferred domains: 0x%lx allowed domains: 0x%lX IB index: %d, dma reloc index: %d\n", reloc->gpu_offset, reloc->robj->placement->placement->mem_type,reloc->preferred_domains, reloc->allowed_domains,p->idx,p->dma_reloc_idx);
 		break;
 	case SX_MEMORY_EXPORT_BASE:
 		if (p->rdev->family >= CHIP_CAYMAN) {
@@ -2803,7 +2804,7 @@ int evergreen_dma_cs_parse(struct radeon_cs_parser *p)
 	u32 idx;
 	u64 src_offset, dst_offset, dst2_offset;
 	int r;
-
+	printk("dma cs parse\n");
 	do {
 		if (p->idx >= ib_chunk->length_dw) {
 			DRM_ERROR("Can not parse packet at %d after CS end %d !\n",

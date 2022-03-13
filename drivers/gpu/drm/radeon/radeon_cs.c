@@ -100,12 +100,12 @@ static int radeon_cs_parser_relocs(struct radeon_cs_parser *p)
 	}
 
 	radeon_cs_buckets_init(&buckets);
-
+	printk("gem relocs\n");
 	for (i = 0; i < p->nrelocs; i++) {
 		struct drm_radeon_cs_reloc *r;
 		struct drm_gem_object *gobj;
 		unsigned priority;
-
+		//printk("reloc %d of %d\n",i,p->nrelocs);
 		r = (struct drm_radeon_cs_reloc *)&chunk->kdata[i*4];
 		gobj = drm_gem_object_lookup(p->filp, r->handle);
 		if (gobj == NULL) {
@@ -145,6 +145,7 @@ static int radeon_cs_parser_relocs(struct radeon_cs_parser *p)
 			/* prioritize this over any other relocation */
 			priority = RADEON_CS_MAX_PRIORITY;
 		} else {
+			//printk("not on UVD ring\n");
 			uint32_t domain = r->write_domain ?
 				r->write_domain : r->read_domains;
 
@@ -155,6 +156,7 @@ static int radeon_cs_parser_relocs(struct radeon_cs_parser *p)
 			}
 
 			p->relocs[i].preferred_domains = domain;
+			//printk("preferred domains: %d\n",domain);
 			if (domain == RADEON_GEM_DOMAIN_VRAM)
 				domain |= RADEON_GEM_DOMAIN_GTT;
 			p->relocs[i].allowed_domains = domain;
@@ -162,6 +164,7 @@ static int radeon_cs_parser_relocs(struct radeon_cs_parser *p)
 
 		if (radeon_ttm_tt_has_userptr(p->rdev, p->relocs[i].robj->tbo.ttm)) {
 			uint32_t domain = p->relocs[i].preferred_domains;
+			printk("has userptr\n");
 			if (!(domain & RADEON_GEM_DOMAIN_GTT)) {
 				DRM_ERROR("Only RADEON_GEM_DOMAIN_GTT is "
 					  "allowed for userptr BOs\n");
@@ -176,6 +179,7 @@ static int radeon_cs_parser_relocs(struct radeon_cs_parser *p)
 		/* Objects shared as dma-bufs cannot be moved to VRAM */
 		if (p->relocs[i].robj->prime_shared_count) {
 			p->relocs[i].allowed_domains &= ~RADEON_GEM_DOMAIN_VRAM;
+			printk("prime_shared_count\n");
 			if (!p->relocs[i].allowed_domains) {
 				DRM_ERROR("BO associated with dma-buf cannot "
 					  "be moved to VRAM\n");
@@ -657,11 +661,60 @@ static int radeon_cs_ib_fill(struct radeon_device *rdev, struct radeon_cs_parser
 	return 0;
 }
 
+
+
+
+
+static void radeon_update_memory_usage(struct radeon_bo *bo,
+				       unsigned mem_type, int sign)
+{
+	struct radeon_device *rdev = bo->rdev;
+	u64 size = (u64)bo->tbo.num_pages << PAGE_SHIFT;
+
+	switch (mem_type) {
+	case TTM_PL_TT:
+		if (sign > 0)
+			atomic64_add(size, &rdev->gtt_usage);
+		else
+			atomic64_sub(size, &rdev->gtt_usage);
+		break;
+	case TTM_PL_VRAM:
+		if (sign > 0)
+			atomic64_add(size, &rdev->vram_usage);
+		else
+			atomic64_sub(size, &rdev->vram_usage);
+		break;
+	}
+}
+
+
+
+
+static void radeon_bo_clear_surface_reg(struct radeon_bo *bo)
+{
+	struct radeon_device *rdev = bo->rdev;
+	struct radeon_surface_reg *reg;
+
+	if (bo->surface_reg == -1)
+		return;
+
+	reg = &rdev->surface_regs[bo->surface_reg];
+	radeon_clear_surface_reg(rdev, bo->surface_reg);
+
+	reg->bo = NULL;
+	bo->surface_reg = -1;
+}
+
+
+
 int radeon_cs_ioctl(struct drm_device *dev, void *data, struct drm_file *filp)
 {
 	struct radeon_device *rdev = dev->dev_private;
 	struct radeon_cs_parser parser;
 	int r;
+	INIT_LIST_HEAD(&rdev->move_bo_head);
+	//printk("RADEON_CS IOCTL called. Skipping it\n");
+	//return 0;
 
 	down_read(&rdev->exclusive_lock);
 	if (!rdev->accel_working) {
@@ -675,6 +728,14 @@ int radeon_cs_ioctl(struct drm_device *dev, void *data, struct drm_file *filp)
 			r = -EAGAIN;
 		return r;
 	}
+
+	//mutex_lock(&rdev->move_bos_mutex);
+
+	// list stuff for moving back BOs (initializing the list)
+
+	//rdev->move_bo_head = moved_bos_list;
+	rdev->trackMoves = true;
+
 	/* initialize parser */
 	memset(&parser, 0, sizeof(struct radeon_cs_parser));
 	parser.filp = filp;
@@ -714,7 +775,51 @@ int radeon_cs_ioctl(struct drm_device *dev, void *data, struct drm_file *filp)
 	if (r) {
 		goto out;
 	}
+
+
 out:
+
+//printk("Getting exclusive lock: %d\n",rdev->exclusive_lock.count);
+	//down_write(&rdev->exclusive_lock);
+	//printk("Got exclusive lock: %d\n",rdev->exclusive_lock.count);
+//mdelay(2);
+
+			/*printk("IB should maybe have finished executing, moving %d BOs back to GTT so userspace can access them properly without issues\n",rdev->nMovedBos);
+
+			struct ww_acquire_ctx ticket;
+			rdev->trackMoves = false;	// when moving the bos back we don't want to track the moves we do.
+			//radeon_bo_list_validate(rdev, &ticket, &rdev->move_bo_head, parser.ring);	// just use the first ring, should be GFX ring
+			//printk("Finished validating the BOs, deleting the list now\n");
+			struct radeon_bo_list *lobj;
+			struct radeon_bo_list *tmp;
+			list_for_each_entry_safe(lobj, tmp, &rdev->move_bo_head, tv.head) {
+				printk("Deleting BO list entry\n");
+				list_del(&lobj->tv.head);
+				kfree(lobj);
+			}*/
+
+
+			/*struct ttm_operation_ctx ctx = { true, false };
+			int i;
+			for(i = 0; i < rdev->nMovedBos; i++){
+				//printk("Moving back BO %d\n",i);
+				struct radeon_bo *bo = rdev->moved_bos[i];
+				//bo->tbo.destroy(&bo->tbo);
+
+					radeon_ttm_placement_from_domain(bo, RADEON_GEM_DOMAIN_GTT);
+				r = ttm_bo_validate(&bo->tbo, &bo->placement, &ctx);
+				if(r){
+					printk("Something went wrong moving bo %d\n",i);
+				}
+			}*/
+
+			/*kfree(rdev->moved_bos);
+			rdev->moved_bos = 0;
+			rdev->nMovedBos = 0;*/
+			//mdelay(2);
+	//up_write(&rdev->exclusive_lock);
+	//printk("Released exclusive lock: %d\n",rdev->exclusive_lock.count);
+			//mutex_unlock(&rdev->move_bos_mutex);
 	radeon_cs_parser_fini(&parser, r, true);
 	up_read(&rdev->exclusive_lock);
 	r = radeon_cs_handle_lockup(rdev, r);
