@@ -2500,17 +2500,30 @@ static inline uint32_t r100_mm_rreg(struct radeon_device *rdev, uint32_t reg,
 				    bool always_indirect)
 {
 	/* The mmio size is 64kb at minimum. Allows the if to be optimized out. */
-	if ((reg < rdev->rmmio_size || reg < RADEON_MIN_MMIO_SIZE) && !always_indirect)
-		return readl(((void __iomem *)rdev->rmmio) + reg);
-	else
+	if ((reg < rdev->rmmio_size || reg < RADEON_MIN_MMIO_SIZE) && !always_indirect){
+		//printk("RREG32 %d\n",reg);
+		__iomb();
+		mb();
+		uint32_t tmp = readl(((void __iomem *)rdev->rmmio) + reg);
+		__iormb(((void __iomem *)rdev->rmmio) + reg);
+		__iomb();
+		mb();
+		return tmp;
+	}else
 		return r100_mm_rreg_slow(rdev, reg);
 }
 static inline void r100_mm_wreg(struct radeon_device *rdev, uint32_t reg, uint32_t v,
 				bool always_indirect)
 {
-	if ((reg < rdev->rmmio_size || reg < RADEON_MIN_MMIO_SIZE) && !always_indirect)
+	if ((reg < rdev->rmmio_size || reg < RADEON_MIN_MMIO_SIZE) && !always_indirect){
+		//printk("WREG32 %d\n",reg);
+		__iowmb();
+		__iomb();
+		mb();
 		writel(v, ((void __iomem *)rdev->rmmio) + reg);
-	else
+		__iomb();
+		mb();
+	}else
 		r100_mm_wreg_slow(rdev, reg, v);
 }
 
