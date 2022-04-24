@@ -216,7 +216,7 @@ static int radeon_move_vram_ram(struct ttm_buffer_object *bo,
 	struct ttm_place placements;
 	struct ttm_placement placement;
 	int r;
-	printk("move vram ram\n");
+	//printk("move vram ram\n");
 	tmp_mem = *new_mem;
 	tmp_mem.mm_node = NULL;
 	placement.num_placement = 1;
@@ -267,7 +267,7 @@ static int radeon_move_ram_vram(struct ttm_buffer_object *bo,
 	struct ttm_placement placement;
 	struct ttm_place placements;
 	int r;
-	printk("move ram vram\n");
+	//printk("move ram vram\n");
 	tmp_mem = *new_mem;
 	tmp_mem.mm_node = NULL;
 	placement.num_placement = 1;
@@ -346,7 +346,7 @@ static int radeon_bo_move(struct ttm_buffer_object *bo, bool evict,
 
 	if (r) {
 memcpy:
-		printk("using memcpy for move\n");
+		//printk("using memcpy for move\n");
 		r = ttm_bo_move_memcpy(bo, ctx, new_mem);
 		if (r) {
 			return r;

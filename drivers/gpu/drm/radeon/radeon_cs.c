@@ -100,7 +100,7 @@ static int radeon_cs_parser_relocs(struct radeon_cs_parser *p)
 	}
 
 	radeon_cs_buckets_init(&buckets);
-	printk("gem relocs\n");
+	//printk("gem relocs\n");
 	for (i = 0; i < p->nrelocs; i++) {
 		struct drm_radeon_cs_reloc *r;
 		struct drm_gem_object *gobj;
@@ -164,7 +164,7 @@ static int radeon_cs_parser_relocs(struct radeon_cs_parser *p)
 
 		if (radeon_ttm_tt_has_userptr(p->rdev, p->relocs[i].robj->tbo.ttm)) {
 			uint32_t domain = p->relocs[i].preferred_domains;
-			printk("has userptr\n");
+			//printk("has userptr\n");
 			if (!(domain & RADEON_GEM_DOMAIN_GTT)) {
 				DRM_ERROR("Only RADEON_GEM_DOMAIN_GTT is "
 					  "allowed for userptr BOs\n");
@@ -179,7 +179,7 @@ static int radeon_cs_parser_relocs(struct radeon_cs_parser *p)
 		/* Objects shared as dma-bufs cannot be moved to VRAM */
 		if (p->relocs[i].robj->prime_shared_count) {
 			p->relocs[i].allowed_domains &= ~RADEON_GEM_DOMAIN_VRAM;
-			printk("prime_shared_count\n");
+			//printk("prime_shared_count\n");
 			if (!p->relocs[i].allowed_domains) {
 				DRM_ERROR("BO associated with dma-buf cannot "
 					  "be moved to VRAM\n");

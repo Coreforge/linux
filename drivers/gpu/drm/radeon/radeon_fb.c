@@ -254,7 +254,7 @@ static int radeonfb_create(struct drm_fb_helper *helper,
 
 	mode_cmd.width = sizes->surface_width;
 	mode_cmd.height = sizes->surface_height;
-	printk("radeonfb_create\n");
+	//printk("radeonfb_create\n");
 	/* avivo can't scanout real 24bpp */
 	if ((sizes->surface_bpp == 24) && ASIC_IS_AVIVO(rdev))
 		sizes->surface_bpp = 32;

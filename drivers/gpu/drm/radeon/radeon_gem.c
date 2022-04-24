@@ -53,7 +53,7 @@ int radeon_gem_object_create(struct radeon_device *rdev, unsigned long size,
 	struct radeon_bo *robj;
 	unsigned long max_size;
 	int r;
-	printk("created gem object of size: 0x%llX domain: 0x%X flags: 0x%X\n",size,initial_domain,flags);
+	//printk("created gem object of size: 0x%llX domain: 0x%X flags: 0x%X\n",size,initial_domain,flags);
 	*obj = NULL;
 	/* At least align on page size */
 	if (alignment < PAGE_SIZE) {
@@ -78,7 +78,7 @@ retry:
 		if (r != -ERESTARTSYS) {
 			if (initial_domain == RADEON_GEM_DOMAIN_VRAM) {
 				initial_domain |= RADEON_GEM_DOMAIN_GTT;
-				printk("radeon_gem l81\n");
+				//printk("radeon_gem l81\n");
 				goto retry;
 			}
 			DRM_ERROR("Failed to allocate GEM object (%ld, %d, %u, %d)\n",
@@ -156,7 +156,7 @@ int radeon_gem_object_open(struct drm_gem_object *obj, struct drm_file *file_pri
 	struct radeon_vm *vm = &fpriv->vm;
 	struct radeon_bo_va *bo_va;
 	int r;
-	printk("gem object open\n");
+	//printk("gem object open\n");
 	if ((rdev->family < CHIP_CAYMAN) ||
 	    (!rdev->accel_working)) {
 		return 0;
@@ -187,7 +187,7 @@ void radeon_gem_object_close(struct drm_gem_object *obj,
 	struct radeon_vm *vm = &fpriv->vm;
 	struct radeon_bo_va *bo_va;
 	int r;
-	printk("gem object close");
+	//printk("gem object close");
 	if ((rdev->family < CHIP_CAYMAN) ||
 	    (!rdev->accel_working)) {
 		return;
@@ -267,7 +267,7 @@ int radeon_gem_create_ioctl(struct drm_device *dev, void *data,
 	u64 size;
 	__u32 flags;
 
-	printk("created gem object (ioctl) of size: 0x%llX domain: 0x%X flags: 0x%X\n",args->size,args->initial_domain,args->flags);
+	//printk("created gem object (ioctl) of size: 0x%llX domain: 0x%X flags: 0x%X\n",args->size,args->initial_domain,args->flags);
 
 	down_read(&rdev->exclusive_lock);
 	/* create a gem object to contain this object in */
@@ -293,7 +293,7 @@ int radeon_gem_create_ioctl(struct drm_device *dev, void *data,
 	rbo = gem_to_radeon_bo(gobj);
 	if(size == 48){
 		// 12 dw, first shader
-		printk("first shader?\n");
+		//printk("first shader?\n");
 	}
 
 
@@ -353,7 +353,7 @@ int radeon_gem_userptr_ioctl(struct drm_device *dev, void *data,
 				     false, &gobj);
 	if (r)
 		goto handle_lockup;
-	printk("userptr");
+	//printk("userptr");
 	bo = gem_to_radeon_bo(gobj);
 	r = radeon_ttm_tt_set_userptr(rdev, bo->tbo.ttm, args->addr, args->flags);
 	if (r)

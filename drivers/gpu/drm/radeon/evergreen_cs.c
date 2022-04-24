@@ -2804,7 +2804,7 @@ int evergreen_dma_cs_parse(struct radeon_cs_parser *p)
 	u32 idx;
 	u64 src_offset, dst_offset, dst2_offset;
 	int r;
-	printk("dma cs parse\n");
+	//printk("dma cs parse\n");
 	do {
 		if (p->idx >= ib_chunk->length_dw) {
 			DRM_ERROR("Can not parse packet at %d after CS end %d !\n",

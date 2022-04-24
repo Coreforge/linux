@@ -68,11 +68,11 @@ void evergreen_dma_ring_ib_execute(struct radeon_device *rdev,
 				   struct radeon_ib *ib)
 {
 	struct radeon_ring *ring = &rdev->ring[ib->ring];
-	printk("executing dma ib, dumping buffer\n");
-	int i;
+	//printk("executing dma ib, dumping buffer\n");
+	/*int i;
 		for(i = 0; i < ib->length_dw; i++){
 			printk("0x%x\n",ib->ptr[i]);
-		}
+		}*/
 	if (rdev->wb.enabled) {
 		u32 next_rptr = ring->wptr + 4;
 		while ((next_rptr & 7) != 5)
@@ -179,7 +179,7 @@ struct radeon_fence *evergreen_copy_dma(struct radeon_device *rdev,
 		cur_size_in_dw = size_in_dw;
 		if (cur_size_in_dw > 0xFFFFF)
 			cur_size_in_dw = 0xFFFFF;
-		printk("copy dma loop %d of %d: copying 0x%X bytes from 0x%llX to 0x%llX",i,num_loops,cur_size_in_dw*4,src_offset,dst_offset);
+		//printk("copy dma loop %d of %d: copying 0x%X bytes from 0x%llX to 0x%llX",i,num_loops,cur_size_in_dw*4,src_offset,dst_offset);
 		size_in_dw -= cur_size_in_dw;
 		radeon_ring_write(ring, DMA_PACKET(DMA_PACKET_COPY, 0, cur_size_in_dw));
 		radeon_ring_write(ring, dst_offset & 0xfffffffc);

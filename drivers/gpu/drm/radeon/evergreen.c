@@ -2931,7 +2931,7 @@ void evergreen_ring_ib_execute(struct radeon_device *rdev, struct radeon_ib *ib)
 {
 	struct radeon_ring *ring = &rdev->ring[ib->ring];
 	u32 next_rptr;
-printk("executing IB\n");
+//printk("executing IB\n");
 	/* set to DX10/11 mode */
 	radeon_ring_write(ring, PACKET3(PACKET3_MODE_CONTROL, 0));
 	radeon_ring_write(ring, 1);
@@ -2999,7 +2999,7 @@ static int evergreen_cp_start(struct radeon_device *rdev)
 	struct radeon_ring *ring = &rdev->ring[RADEON_RING_TYPE_GFX_INDEX];
 	int r, i;
 	uint32_t cp_me;
-	printk("evergreen_cp_start\n");
+	//printk("evergreen_cp_start\n");
 	r = radeon_ring_lock(rdev, ring, 7);
 	if (r) {
 		DRM_ERROR("radeon: cp failed to lock ring (%d).\n", r);
@@ -5202,7 +5202,7 @@ int evergreen_init(struct radeon_device *rdev)
 		}
 		DRM_INFO("GPU not posted. posting now...\n");
 		r = atom_asic_init(rdev->mode_info.atom_context);
-		printk("Posting result: %d\n",r);
+		//printk("Posting result: %d\n",r);
 	}
 	/* init golden registers */
 	evergreen_init_golden_registers(rdev);

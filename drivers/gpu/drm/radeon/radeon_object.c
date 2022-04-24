@@ -601,7 +601,7 @@ int radeon_bo_list_validate(struct radeon_device *rdev,
 			    bytes_moved > bytes_moved_threshold) {
 				/* don't move it */
 				domain = current_domain;
-				printk("not moving\n");
+				//printk("not moving\n");
 			}
 
 		retry:
