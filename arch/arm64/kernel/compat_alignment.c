@@ -411,6 +411,8 @@ potentially also ldur	q0, [x1, #32] and ldur	q1, [x1, #48]
  *
  */
 
+#include <linux/timekeeping.h>
+
 struct fixupDescription{
 	void* addr;
 
@@ -431,9 +433,14 @@ struct fixupDescription{
 	int width;	// width of the access in bits
 	int extendSign;
 	int extend_width;
+
+	// profiling
+	u64 starttime;
+	u64 decodedtime;
+	u64 endtime;
 };
 
-static int alignment_get_arm64(struct pt_regs *regs, __le64 __user *ip, u32 *inst)
+__attribute__((always_inline)) inline static int alignment_get_arm64(struct pt_regs *regs, __le64 __user *ip, u32 *inst)
 {
 	__le32 instr = 0;
 	int fault;
@@ -446,7 +453,7 @@ static int alignment_get_arm64(struct pt_regs *regs, __le64 __user *ip, u32 *ins
 	return 0;
 }
 
-int64_t extend_sign(int64_t in, int bits){
+__attribute__((always_inline)) inline int64_t extend_sign(int64_t in, int bits){
 	bits--;
 	if(in & (1 << bits)){
 		// extend sign
@@ -495,7 +502,7 @@ int64_t extend_sign(int64_t in, int bits){
 }*/
 
 // saves the contents of the simd register reg to dst
-void read_simd_reg(int reg, u64 dst[2]){
+__attribute__((always_inline)) inline void read_simd_reg(int reg, u64 dst[2]){
 	struct user_fpsimd_state st = {0};
 	//fpsimd_save_state(&st);
 
@@ -514,7 +521,7 @@ void read_simd_reg(int reg, u64 dst[2]){
 }
 
 
-void write_simd_reg(int reg, u64 src[2]){
+__attribute__((always_inline)) inline void write_simd_reg(int reg, u64 src[2]){
 
 	if(!may_use_simd()){
 		printk("may_use_simd returned false!\n");
@@ -530,11 +537,228 @@ void write_simd_reg(int reg, u64 src[2]){
 	kernel_neon_end();
 }
 
+// these try to use larger access widths than single bytes. Slower for small loads/stores, but it might speed larger ones up
+
+__attribute__((always_inline)) inline int put_data2(int size, uint8_t* data, void* addr){
+	int r = 0;
+
+	while(size){
+		if(size >= 4 && (((u64)addr % 4) == 0)){
+			if((r=put_user( (*(((uint32_t*)(data)))), (uint32_t __user *)addr))){
+				printk("Failed to write data at 0x%px (%d)\n", addr,r);
+				return r;
+			}
+			addr += 4;
+			data += 4;
+			size -= 4;
+			continue;
+		}
+		if(size >= 2 && (((u64)addr % 2) == 0)){
+			if((r=put_user( (*(((uint16_t*)(data)))), (uint16_t __user *)addr))){
+				printk("Failed to write data at 0x%px (%d)\n", addr,r);
+				return r;
+			}
+			addr += 2;
+			data += 2;
+			size -= 2;
+			continue;
+		}
+		// I guess the if is redundant here
+		if(size >= 1){
+			if((r=put_user( (*(((uint8_t*)(data)))), (uint8_t __user *)addr))){
+				printk("Failed to write data at 0x%px (%d)\n", addr,r);
+				return r;
+			}
+			addr += 1;
+			data += 1;
+			size -= 1;
+			continue;
+		}
+
+	}
+
+	return r;
+}
+
+__attribute__((always_inline)) inline int get_data2(int size, uint8_t* data, void* addr){
+	int r = 0;
+	uint32_t val32;
+	uint16_t val16;
+	uint8_t val8;
+	while(size){
+		if(size >= 4 && (((u64)addr % 4) == 0)){
+			if((r=get_user( val32, (uint32_t __user *)addr))){
+				printk("Failed to read data at 0x%px\n", addr);
+				return r;
+			}
+			*((uint32_t*)data) = val32;
+			addr += 4;
+			data += 4;
+			size -= 4;
+			continue;
+		}
+		if(size >= 2 && (((u64)addr % 2) == 0)){
+			if((r=get_user( val16, (uint16_t __user *)addr))){
+				printk("Failed to read data at 0x%px\n", addr);
+				return r;
+			}
+			*((uint16_t*)data) = val16;
+			addr += 2;
+			data += 2;
+			size -= 2;
+			continue;
+		}
+		// I guess the if is redundant here
+		if(size >= 1){
+			if((r=get_user( val8, (uint8_t __user *)addr))){
+				printk("Failed to read data at 0x%px\n", addr);
+				return r;
+			}
+			*((uint8_t*)data) = val8;
+			addr += 1;
+			data += 1;
+			size -= 1;
+			continue;
+		}
+
+	}
+
+	return r;
+}
+
+
+// these should avoid some branching, but still use single byte accesses
+__attribute__((always_inline)) inline int put_data(int size, uint8_t* data, void* addr){
+	int r = 0;
+	int addrIt = 0;
+
+	// with the fixed size loops, the compiler should be able to unroll them
+	// this should mean a lot less branching
+	switch(size){
+	case 16:
+		for(int i = 0; i < 8; i++){
+			if((r=put_user( (*(((uint8_t*)(data)) + addrIt) & 0xff), (uint8_t __user *)addr))){
+				printk("Failed to write data at 0x%px\n", addr);
+				return r;
+			}
+			addrIt++;
+			addr++;
+		}
+		// fall through
+	case 8:
+		for(int i = 0; i < 4; i++){
+			if((r=put_user( (*(data + addrIt) & 0xff), (uint8_t __user *)addr))){
+				printk("Failed to write data at 0x%px\n", addr);
+				return r;
+			}
+			addrIt++;
+			addr++;
+		}
+		// fall through
+	case 4:
+		for(int i = 0; i < 2; i++){
+			if((r=put_user( (*(data + addrIt) & 0xff), (uint8_t __user *)addr))){
+				printk("Failed to write data at 0x%px\n", addr);
+				return r;
+			}
+			addrIt++;
+			addr++;
+		}
+		// fall through
+	case 2:
+		if((r=put_user( (*(data + addrIt) & 0xff), (uint8_t __user *)addr))){
+			printk("Failed to write data at 0x%px\n", addr);
+			return r;
+		}
+		addrIt++;
+		addr++;
+		// fall through
+	case 1:
+		if((r=put_user( (*(data + addrIt) & 0xff), (uint8_t __user *)addr))){
+			printk("Failed to write data at 0x%px\n", addr);
+			return r;
+		}
+		addrIt++;
+		addr++;
+		break;
+	default:
+		printk("unsupported size %d\n", size);
+	}
+
+	return r;
+}
+
+__attribute__((always_inline)) inline int get_data(int size, uint8_t* data, void* addr){
+	int r = 0;
+	int addrIt = 0;
+
+	// with the fixed size loops, the compiler should be able to unroll them
+	// this should mean a lot less branching
+	uint8_t val;
+	switch(size){
+	case 16:
+		for(int i = 0; i < 8; i++){
+			if((r=get_user( val, (uint8_t __user *)addr))){
+				printk("Failed to read data at 0x%px\n", addr);
+				return r;
+			}
+			*(data + addrIt) = val;
+			addrIt++;
+			addr++;
+		}
+		// fall through
+	case 8:
+		for(int i = 0; i < 4; i++){
+			if((r=get_user( val, (uint8_t __user *)addr))){
+				printk("Failed to read data at 0x%px\n", addr);
+				return r;
+			}
+			*(data + addrIt) = val;
+			addrIt++;
+			addr++;
+		}
+		// fall through
+	case 4:
+		for(int i = 0; i < 2; i++){
+			if((r=get_user( val, (uint8_t __user *)addr))){
+				printk("Failed to read data at 0x%px\n", addr);
+				return r;
+			}
+			*(data + addrIt) = val;
+			addrIt++;
+			addr++;
+		}
+		// fall through
+	case 2:
+		if((r=get_user( val, (uint8_t __user *)addr))){
+			printk("Failed to read data at 0x%px\n", addr);
+			return r;
+		}
+		*(data + addrIt) = val;
+		addrIt++;
+		addr++;
+		// fall through
+	case 1:
+		if((r=get_user( val, (uint8_t __user *)addr))){
+			printk("Failed to read data at 0x%px\n", addr);
+			return r;
+		}
+		*(data + addrIt) = val;
+		addrIt++;
+		addr++;
+		break;
+	default:
+		printk("unsupported size %d\n", size);
+	}
+
+	return r;
+}
+
 int do_ls_fixup(u32 instr, struct pt_regs *regs, struct fixupDescription* desc){
 	int r;
 	u64 data1[2] = {0,0};
 	u64 data2[2] = {0,0};
-
+	//desc->decodedtime = ktime_get_ns();
 	// the reg indices have to always be valid, even if the reg isn't being used
 	if(!desc->load){
 		if(desc->simd){
@@ -568,25 +792,28 @@ int do_ls_fixup(u32 instr, struct pt_regs *regs, struct fixupDescription* desc){
 		int addrIt = 0;
 		for(int i = 0; i < bcount; i++){
 			if((r=put_user( (*(((uint8_t*)(data1)) + addrIt) & 0xff), (uint8_t __user *)addr))){
-				printk("Failed to write data at 0x%px (base was 0x%px)\n", addr, desc->addr);
+				printk("Failed to write data at 0x%px (%d)(base was 0x%px)\n", addr, r, desc->addr);
 				return r;
 			}
 			//desc->data1 >>= 8;
 			addrIt++;
 			addr++;
 		}
-
+		//put_data2(bcount, (uint8_t*)data1, addr);
+		//addr += bcount;
 		addrIt = 0;
 		if(desc->pair){
 			for(int i = 0; i < bcount; i++){
 				if((r=put_user((*(((uint8_t*)(data2)) + addrIt) & 0xff) & 0xff, (uint8_t __user *)addr))){
-					printk("Failed to write data at 0x%px (base was 0x%px)\n", addr, desc->addr);
+					printk("Failed to write data at 0x%px (%d)(base was 0x%px)\n", addr, r, desc->addr);
 					return r;
 				}
 				//desc->data2 >>= 8;
 				addrIt++;
 				addr++;
 			}
+			//put_data2(bcount, (uint8_t*)data2, addr);
+			addr += bcount;
 		}
 		arm64_skip_faulting_instruction(regs, 4);
 	} else {
@@ -597,7 +824,7 @@ int do_ls_fixup(u32 instr, struct pt_regs *regs, struct fixupDescription* desc){
 
 		//printk("Storing %d bytes (pair: %d) to 0x%llx",bcount, desc->pair, desc->addr);
 		int addrIt = 0;
-		for(int i = 0; i < bcount; i++){
+		/*for(int i = 0; i < bcount; i++){
 			uint8_t val;
 			if((r=get_user( val, (uint8_t __user *)addr))){
 				printk("Failed to write data at 0x%px (base was 0x%px)\n", addr, desc->addr);
@@ -607,7 +834,9 @@ int do_ls_fixup(u32 instr, struct pt_regs *regs, struct fixupDescription* desc){
 			//desc->data1 >>= 8;
 			addrIt++;
 			addr++;
-		}
+		}*/
+		get_data2(bcount, (uint8_t*)data1, addr);
+		addr += bcount;
 
 		if(desc->simd){
 			write_simd_reg(desc->reg1, data1);
@@ -617,7 +846,7 @@ int do_ls_fixup(u32 instr, struct pt_regs *regs, struct fixupDescription* desc){
 
 		addrIt = 0;
 		if(desc->pair){
-			for(int i = 0; i < bcount; i++){
+			/*for(int i = 0; i < bcount; i++){
 				uint8_t val;
 				if((r=get_user(val, (uint8_t __user *)addr))){
 					printk("Failed to write data at 0x%px (base was 0x%px)\n", addr, desc->addr);
@@ -627,8 +856,10 @@ int do_ls_fixup(u32 instr, struct pt_regs *regs, struct fixupDescription* desc){
 				//desc->data2 >>= 8;
 				addrIt++;
 				addr++;
-			}
+			}*/
 
+			get_data2(bcount, (uint8_t*)data2, addr);
+			addr += bcount;
 			if(desc->simd){
 				write_simd_reg(desc->reg2, data1);
 			} else {
@@ -713,7 +944,7 @@ int ls_cas_fixup(u32 instr, struct pt_regs *regs, struct fixupDescription* desc)
 	return 0;
 }
 
-int ls_pair_fixup(u32 instr, struct pt_regs *regs, struct fixupDescription* desc){
+__attribute__((always_inline)) inline int ls_pair_fixup(u32 instr, struct pt_regs *regs, struct fixupDescription* desc){
 	uint8_t op2;
 	uint8_t opc;
 	op2 = (instr >> 23) & 3;
@@ -727,15 +958,16 @@ int ls_pair_fixup(u32 instr, struct pt_regs *regs, struct fixupDescription* desc
 	uint8_t Rt = instr & 0x1f;
 
 	int64_t imm = extend_sign(imm7, 7);
-	int immshift = 0;
+	//int immshift = 0;
 	desc->load = load;
 	desc->simd = simd;
 
 	// opc controls the width
 	if(simd){
 		desc->width = 32 << opc;
-		immshift = 4 << opc;
-		imm <<= immshift;
+		//immshift = 4 << opc;
+		imm <<= 2;
+		imm <<= opc;
 	} else {
 		switch(opc){
 		case 0:
@@ -769,7 +1001,7 @@ int ls_pair_fixup(u32 instr, struct pt_regs *regs, struct fixupDescription* desc
 
 }
 
-int ls_reg_unsigned_imm(u32 instr, struct pt_regs *regs, struct fixupDescription* desc){
+__attribute__((always_inline)) inline int ls_reg_unsigned_imm(u32 instr, struct pt_regs *regs, struct fixupDescription* desc){
 	uint8_t size = (instr >> 30) & 3;
 	uint8_t simd = (instr >> 26) & 1;
 	uint8_t opc = (instr >> 22) & 3;
@@ -809,7 +1041,7 @@ int ls_reg_unsigned_imm(u32 instr, struct pt_regs *regs, struct fixupDescription
 }
 
 
-u64 extend_reg(u64 reg, int type, int shift){
+__attribute__((always_inline)) inline u64 extend_reg(u64 reg, int type, int shift){
 
 	uint8_t is_signed = (type & 4) >> 2;
 	uint8_t input_width = type & 1;
@@ -835,7 +1067,7 @@ u64 extend_reg(u64 reg, int type, int shift){
 	return tmp << shift;
 }
 
-int lsr_offset_fixup(u32 instr, struct pt_regs *regs, struct fixupDescription* desc){
+__attribute__((always_inline)) inline int lsr_offset_fixup(u32 instr, struct pt_regs *regs, struct fixupDescription* desc){
 	uint8_t size = (instr >> 30) & 3;
 	uint8_t simd = (instr >> 26) & 1;
 	uint8_t opc = (instr >> 22) & 3;
@@ -893,7 +1125,7 @@ int lsr_offset_fixup(u32 instr, struct pt_regs *regs, struct fixupDescription* d
 	return 0;
 }
 
-int lsr_unscaled_immediate_fixup(u32 instr, struct pt_regs *regs, struct fixupDescription* desc){
+__attribute__((always_inline)) inline int lsr_unscaled_immediate_fixup(u32 instr, struct pt_regs *regs, struct fixupDescription* desc){
 	uint8_t size = (instr >> 30) & 3;
 	uint8_t simd = (instr >> 26) & 1;
 	uint8_t opc = (instr >> 22) & 3;
@@ -936,7 +1168,7 @@ int lsr_unscaled_immediate_fixup(u32 instr, struct pt_regs *regs, struct fixupDe
 	return 1;
 }
 
-int ls_fixup(u32 instr, struct pt_regs *regs, struct fixupDescription* desc){
+__attribute__((always_inline)) inline int ls_fixup(u32 instr, struct pt_regs *regs, struct fixupDescription* desc){
 	uint8_t op0;
 	uint8_t op1;
 	uint8_t op2;
@@ -1024,19 +1256,24 @@ int do_alignment_fixup(unsigned long addr, struct pt_regs *regs){
 	 *
 	 */
 
-	instrDBG(instr);
+	//instrDBG(instr);
 
 	uint8_t op0;
 	int r;
 	struct fixupDescription desc = {0};
-
+	//desc.starttime = ktime_get_ns();
 	op0 = ((instr & 0x1E000000) >> 25);
 	if((op0 & 5) == 0x4){
 		//printk("Load/Store\n");
 		r = ls_fixup(instr, regs, &desc);
+		//desc.endtime = ktime_get_ns();
+		/*printk("Trap timing: decoding: %ldns, mem ops: %ldns, total: %ldns\n", desc.decodedtime - desc.starttime,
+				desc.endtime - desc.decodedtime, desc.endtime - desc.starttime);
+				*/
 		if(r){
 			printk("Faulting instruction: 0x%lx\n", instr);
 		}
+
 		return r;
 	} else {
 		printk("Not handling instruction with op0 0x%x ",op0);
