@@ -113,6 +113,7 @@ static const char radeon_family_name[][16] = {
 	"LAST",
 };
 
+
 #if defined(CONFIG_VGA_SWITCHEROO)
 bool radeon_has_atpx_dgpu_power_cntl(void);
 bool radeon_is_atpx_hybrid(void);
@@ -491,7 +492,7 @@ int radeon_wb_init(struct radeon_device *rdev)
 	}
 
 	/* clear wb memory */
-	memset((char *)rdev->wb.wb, 0, RADEON_GPU_PAGE_SIZE);
+	memset_io((char *)rdev->wb.wb, 0, RADEON_GPU_PAGE_SIZE);
 	/* disable event_write fences */
 	rdev->wb.use_event = false;
 	/* disabled via module param */

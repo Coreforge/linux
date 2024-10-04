@@ -172,6 +172,8 @@ extern "C" {
  */
 #define AMDGPU_GEM_CREATE_EXT_COHERENT		(1 << 15)
 
+#define AMDGPU_GEM_USER_CREATED		(1 << 31)
+
 struct drm_amdgpu_gem_create_in  {
 	/** the requested memory size */
 	__u64 bo_size;

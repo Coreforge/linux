@@ -1082,8 +1082,11 @@ static struct ttm_tt *amdgpu_ttm_tt_create(struct ttm_buffer_object *bo,
 
 	if (abo->flags & AMDGPU_GEM_CREATE_CPU_GTT_USWC)
 		caching = ttm_write_combined;
-	else
-		caching = ttm_cached;
+	else/* if(abo->flags & AMDGPU_GEM_USER_CREATED){
+		printk("User bo, write combined!\n");
+		caching = ttm_write_combined;	// hopefully userspace is fine with a little bit of incoherency
+	}else*/
+		caching = ttm_uncached;
 
 	/* allocate space for the uninitialized page entries */
 	if (ttm_sg_tt_init(&gtt->ttm, bo, page_flags, caching)) {

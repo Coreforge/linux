@@ -679,6 +679,7 @@ int amdgpu_bo_create_user(struct amdgpu_device *adev,
 
 	bp->bo_ptr_size = sizeof(struct amdgpu_bo_user);
 	bp->destroy = &amdgpu_bo_user_destroy;
+	bp->flags |= AMDGPU_GEM_USER_CREATED;
 	r = amdgpu_bo_create(adev, bp, &bo_ptr);
 	if (r)
 		return r;
