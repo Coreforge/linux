@@ -412,6 +412,7 @@ potentially also ldur	q0, [x1, #32] and ldur	q1, [x1, #48]
  */
 
 #include <linux/timekeeping.h>
+#include <generated/asm/sysreg-defs.h>
 
 struct fixupDescription{
 	void* addr;
@@ -751,6 +752,38 @@ __attribute__((always_inline)) inline int get_data(int size, uint8_t* data, void
 		printk("unsupported size %d\n", size);
 	}
 
+	return r;
+}
+
+int memset_io_user(uint64_t size, uint8_t c, void* addr){
+	int r = 0;
+	uint64_t pattern = c;
+	pattern |= pattern << 8;
+	pattern |= pattern << 16;
+	pattern |= pattern << 32;
+	uint64_t cnt = 0;
+	while(cnt < size){
+		if((uint64_t)(addr + cnt) % 8){
+			if((r = put_user(c, (uint8_t __user*) addr))){
+				printk("Failed to write data at 0x%px (%d)(base was 0x%px)\n", addr + cnt, r, addr);
+				return r;
+			}
+			cnt++;
+		} else if(size - cnt >= 8){
+			if((r = put_user(pattern, (uint64_t __user*) addr))){
+				printk("Failed to write data at 0x%px (%d)(base was 0x%px)\n", addr + cnt, r, addr);
+				return r;
+			}
+			cnt += 8;
+		} else{
+			if((r = put_user(c, (uint8_t __user*) addr))){
+				printk("Failed to write data at 0x%px (%d)(base was 0x%px)\n", addr + cnt, r, addr);
+				return r;
+			}
+			cnt++;
+		}
+
+	}
 	return r;
 }
 
@@ -1214,6 +1247,60 @@ __attribute__((always_inline)) inline int ls_fixup(u32 instr, struct pt_regs *re
 	return r;
 }
 
+__attribute__((always_inline)) inline int system_fixup(u32 instr, struct pt_regs *regs, struct fixupDescription* desc){
+	uint8_t op1;
+	uint8_t op2;
+	uint8_t CRn;
+	uint8_t CRm;
+	uint8_t Rt;
+	bool L;
+	int r = 0;
+
+	op1 = (instr >> 16) & 0x7;
+	op2 = (instr >> 5) & 0x7;
+	CRn = (instr >> 12) & 0xf;
+	CRm = (instr >> 8) & 0xf;
+	L = (instr >> 21) & 1;
+	Rt = instr & 0x1f;
+
+	if(!L){
+		// SYS
+		// proper decoding would be nicer here, but I don't expect to see too many system instructions
+		if((op1 == 0x3) && (op2 == 1) && (CRn = 0x7) && (CRm == 4)){
+			// dc zva
+			uint64_t dczid_el0 = read_sysreg_s(SYS_DCZID_EL0);
+			if(!((dczid_el0 >> DCZID_EL0_DZP_SHIFT) & 1)){
+				uint16_t blksize = 4 << (dczid_el0 & 0xf);
+				r = memset_io_user(blksize, 0, regs->user_regs.regs[Rt]);
+				arm64_skip_faulting_instruction(regs, 4);
+				return r;
+			} else {
+				printk("DC ZVA is not allowed!\n");
+				return 1;
+			}
+		}
+	}
+
+	printk("Unhandled system instruction. op1=0x%x op2=0x%x CRn=0x%x CRm=0x%x\n", op1, op2, CRn, CRm);
+	return 1;
+}
+
+__attribute__((always_inline)) inline int branch_except_system_fixup(u32 instr, struct pt_regs *regs, struct fixupDescription* desc){
+	uint8_t op0;
+	uint32_t op1;
+	uint8_t op2;
+
+	op0 = (instr >> 29) & 0x7;
+	op1 = (instr >> 5) & 0x1fffff;
+	op2 = instr & 0x1f;
+
+	if((op0 == 0x6) && (op1 & 0x1ec000) == 0x84000){
+		return system_fixup(instr, regs, desc);
+	}
+	printk("Unhandled Branch/Exception generating/System instruction. op0=0x%x op1=0x%x op2=0x%x\n", op0, op1, op2);
+	return 1;
+}
+
 uint32_t*  seenCMDs;
 size_t seenCMDCount = 0;
 size_t seenCMDSize = 0;
@@ -1275,8 +1362,11 @@ int do_alignment_fixup(unsigned long addr, struct pt_regs *regs){
 		}
 
 		return r;
-	} else {
-		printk("Not handling instruction with op0 0x%x ",op0);
+	} else if((op0 & 0xe) == 0xa){
+		// System instructions, needed for dc zva
+		return branch_except_system_fixup(instr, regs, &desc);
+	}else {
+		printk("Not handling instruction with op0 0x%x (instruction is 0x%08x)",op0, instr);
 	}
 	return -1;
 }
