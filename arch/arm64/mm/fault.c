@@ -718,8 +718,6 @@ static int __kprobes do_translation_fault(unsigned long far,
 static int do_alignment_fault(unsigned long far, unsigned long esr,
 			      struct pt_regs *regs)
 {
-	//printk("Alignment fault: fixup enabled?: %d, user mode: %d pstate: 0x%llx\n", IS_ENABLED(CONFIG_COMPAT_ALIGNMENT_FIXUPS), compat_user_mode(regs), regs->pstate);
-	trigger_all_cpu_backtrace();
 	if (IS_ENABLED(CONFIG_COMPAT_ALIGNMENT_FIXUPS) &&
 	    compat_user_mode(regs))
 		return do_compat_alignment_fixup(far, regs);
