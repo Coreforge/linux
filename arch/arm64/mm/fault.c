@@ -722,7 +722,7 @@ static int do_alignment_fault(unsigned long far, unsigned long esr,
 	    compat_user_mode(regs))
 		return do_compat_alignment_fixup(far, regs);
 
-	if(user_mode(regs)){
+	if(IS_ENABLED(CONFIG_ARM64_ALIGNMENT_FIXUPS) && user_mode(regs)){
 		// aarch64 user mode
 		if(do_alignment_fixup(far, regs) == 0){
 			return 0;
