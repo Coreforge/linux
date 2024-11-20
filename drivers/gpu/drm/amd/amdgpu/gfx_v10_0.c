@@ -5314,7 +5314,7 @@ static void gfx_v10_0_rlc_backdoor_autoload_copy_ucode(struct amdgpu_device *ade
 	if (fw_size > toc_fw_size)
 		fw_size = toc_fw_size;
 
-	memcpy(ptr + toc_offset, fw_data, fw_size);
+	memcpy_toio(ptr + toc_offset, fw_data, fw_size);
 
 	if (fw_size < toc_fw_size)
 		memset_io(ptr + toc_offset + fw_size, 0, toc_fw_size - fw_size);
